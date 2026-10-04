@@ -1,0 +1,15 @@
+# Secrets
+.env
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Runtime artefacts (never committed -> repo stays small)
+logs/
+preview/
+public/
+data/*.lock
+data/ai_cache.json
+data/seen_cache.json

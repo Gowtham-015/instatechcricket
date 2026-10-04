@@ -1,0 +1,127 @@
+[
+  {
+    "id": "20261004194533_80971df7",
+    "title": "France to close up to 500 schools on Monday over student protests",
+    "url": "https://www.bbc.co.uk/news/articles/cwkg5n7lm3y5o?at_medium=RSS&at_campaign=rss",
+    "category": "News",
+    "fingerprint": "80971df7a587b2",
+    "sources": [
+      "BBC News",
+      "NDTV News"
+    ],
+    "score": 62.2,
+    "breaking": false,
+    "mode": "fallback",
+    "slot": null,
+    "caption_len": 455,
+    "published_at": "2026-10-04T19:45:33.249996+00:00",
+    "articles": [
+      {
+        "url": "https://www.bbc.co.uk/news/articles/cwkg5n7lm3y5o?at_medium=RSS&at_campaign=rss",
+        "title": "France to close up to 500 schools on Monday over student protests"
+      },
+      {
+        "url": "https://www.ndtv.com/world-news/nearly-500-schools-in-france-to-be-closed-monday-over-student-protests-12138364#publisher=newsstand",
+        "title": "Nearly 500 Schools In France To Be Closed Monday Over Student Protests"
+      }
+    ],
+    "media_id": "18636733570057841",
+    "permalink": "https://www.instagram.com/p/DeFau6Ck1Ev/"
+  },
+  {
+    "id": "20261004194822_ca1c7c22",
+    "title": "Nykaa expects net revenue growth in late twenties in Q2",
+    "url": "https://economictimes.indiatimes.com/tech/technology/nykaa-expects-net-revenue-growth-in-late-twenties-in-q2/articleshow/134679826.cms",
+    "category": "Technology",
+    "fingerprint": "ca1c7c22b16d07",
+    "sources": [
+      "Economic Times Tech"
+    ],
+    "score": 57.7,
+    "breaking": false,
+    "mode": "ai",
+    "slot": null,
+    "caption_len": 924,
+    "published_at": "2026-10-04T19:48:22.701865+00:00",
+    "articles": [
+      {
+        "url": "https://economictimes.indiatimes.com/tech/technology/nykaa-expects-net-revenue-growth-in-late-twenties-in-q2/articleshow/134679826.cms",
+        "title": "Nykaa expects net revenue growth in late twenties in Q2"
+      }
+    ],
+    "media_id": "18071447048775330",
+    "permalink": "https://www.instagram.com/p/DeFbFt7E_Ao/"
+  },
+  {
+    "id": "20261004195119_560ba7cc",
+    "title": "James Gunn Confirms He’s ‘Already’ Writing His Next Film Ahead of ‘Superman: Man of Tomorrow’",
+    "url": "https://variety.com/2026/film/news/james-gunn-next-project-superman-man-of-tomorrow-1236898696/",
+    "category": "Entertainment",
+    "fingerprint": "560ba7cc9bdc5b",
+    "sources": [
+      "Variety"
+    ],
+    "score": 62.7,
+    "breaking": false,
+    "mode": "ai",
+    "slot": null,
+    "caption_len": 792,
+    "published_at": "2026-10-04T19:51:19.046820+00:00",
+    "articles": [
+      {
+        "url": "https://variety.com/2026/film/news/james-gunn-next-project-superman-man-of-tomorrow-1236898696/",
+        "title": "James Gunn Confirms He’s ‘Already’ Writing His Next Film Ahead of ‘Superman: Man of Tomorrow’"
+      }
+    ],
+    "media_id": "18246001873310804",
+    "permalink": "https://www.instagram.com/p/DeFbZwWE08O/"
+  },
+  {
+    "id": "20261004195246_0882b6ab",
+    "title": "Wu wins first title since Crucible as Chinese snooker hits new high",
+    "url": "https://www.bbc.co.uk/sport/snooker/articles/cq4g1l0gxl44o?at_medium=RSS&at_campaign=rss",
+    "category": "Sports",
+    "fingerprint": "0882b6abe56b1c",
+    "sources": [
+      "BBC Sport"
+    ],
+    "score": 58.8,
+    "breaking": false,
+    "mode": "ai",
+    "slot": null,
+    "caption_len": 678,
+    "published_at": "2026-10-04T19:52:46.874915+00:00",
+    "articles": [
+      {
+        "url": "https://www.bbc.co.uk/sport/snooker/articles/cq4g1l0gxl44o?at_medium=RSS&at_campaign=rss",
+        "title": "Wu wins first title since Crucible as Chinese snooker hits new high"
+      }
+    ],
+    "media_id": "18095911202541375",
+    "permalink": "https://www.instagram.com/p/DeFbmYmEyQU/"
+  },
+  {
+    "id": "20261004195534_63ec4877",
+    "title": "Wales' Elfyn Evans wins his first World Rally Championship",
+    "url": "https://www.bbc.co.uk/sport/motorsport/articles/cmd6dq5gyw7xo?at_medium=RSS&at_campaign=rss",
+    "category": "News",
+    "fingerprint": "63ec4877dc0561",
+    "sources": [
+      "BBC News"
+    ],
+    "score": 59.3,
+    "breaking": false,
+    "mode": "ai",
+    "slot": null,
+    "caption_len": 736,
+    "published_at": "2026-10-04T19:55:34.932914+00:00",
+    "articles": [
+      {
+        "url": "https://www.bbc.co.uk/sport/motorsport/articles/cmd6dq5gyw7xo?at_medium=RSS&at_campaign=rss",
+        "title": "Wales' Elfyn Evans wins his first World Rally Championship"
+      }
+    ],
+    "media_id": "18412775164083757",
+    "permalink": "https://www.instagram.com/p/DeFb7Jek0jJ/"
+  }
+]

@@ -1,0 +1,77 @@
+name: Instagram AI News Agent
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # every 30 minutes (GitHub may delay runs; slots have a 90-min grace window)
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force a post now (ignores slots / daily cap)"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Dry run (build the post, do not publish)"
+        type: boolean
+        default: false
+
+# Never run two agents at once (prevents double posts + state conflicts)
+concurrency:
+  group: instagram-agent
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # commit small state files + (optional) media branch
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install fonts + dependencies
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y --no-install-recommends fonts-dejavu-core
+          pip install -r requirements.txt
+
+      - name: Run one cycle
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+          ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          MEDIA_HOST: ${{ vars.MEDIA_HOST || 'cloudinary' }}
+          BRAND_NAME: ${{ vars.BRAND_NAME || 'Daily Pulse' }}
+          ACCOUNT_HANDLE: ${{ vars.ACCOUNT_HANDLE || '@yourhandle' }}
+          BRAND_HASHTAGS: ${{ vars.BRAND_HASHTAGS }}
+          POST_TIMES: ${{ vars.POST_TIMES || '09:00,13:00,18:00,21:00' }}
+          CATEGORY_WEIGHTS: ${{ vars.CATEGORY_WEIGHTS || 'News:3,Technology:3,Sports:2,Entertainment:2' }}
+        run: |
+          ARGS=""
+          [ "${{ inputs.force }}" = "true" ] && ARGS="$ARGS --force"
+          [ "${{ inputs.dry_run }}" = "true" ] && ARGS="$ARGS --dry-run"
+          python main.py run $ARGS
+
+      - name: Commit state (small JSON files only)
+        if: always()
+        run: |
+          git config user.name  "insta-agent[bot]"
+          git config user.email "insta-agent@users.noreply.github.com"
+          git add data/history.json data/schedule_state.json data/attempts.json data/health_state.json 2>/dev/null || true
+          if git diff --cached --quiet; then echo "No state changes"; exit 0; fi
+          git commit -m "chore(state): update agent state [skip ci]"
+          for i in 1 2 3; do
+            git pull --rebase -X theirs origin "${GITHUB_REF_NAME}" && git push && exit 0
+            sleep $((i * 3))
+          done
+          echo "::error::could not push state"; exit 1
