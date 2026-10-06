@@ -120,9 +120,9 @@ def build_hashtags(ai_tags: list[str] | None, category: str) -> list[str]:
 
 
 # ----------------------------------------------------------------- caption
-def compose_caption(content: dict, cluster: dict) -> str:
+def compose_caption(content: dict, cluster: dict, footage_credit: str | None = None) -> str:
     emoji = CATEGORY_EMOJI.get(cluster["category"], "📰")
-    credit = ", ".join(cluster["sources"][:3])
+    credit = ", ".join(cluster["sources"][:3]) + (f" | Footage: {footage_credit}" if footage_credit else "")
     tail_parts = []
     if content.get("why_it_matters"):
         tail_parts.append(f"💡 Why it matters: {content['why_it_matters']}")
@@ -179,6 +179,67 @@ def validate_content(data: dict, source_text: str, category: str) -> dict:
     }
 
 
+# ----------------------------------------------------------------- reel script
+def validate_reel(data: dict, source_text: str, category: str) -> dict:
+    """Narration for a voiced Reel: short spoken sentences, grounded numbers, no filler."""
+    if not isinstance(data, dict):
+        raise ContentError("response is not a JSON object")
+    hook = trim(str(data.get("hook", "")), 70)
+    if len(hook) < 15:
+        raise ContentError("hook too short")
+    narr_in = data.get("narration")
+    if isinstance(narr_in, str):
+        narr_in = re.split(r"(?<=[.!?])\s+", narr_in.strip())
+    if not isinstance(narr_in, list) or not (3 <= len(narr_in) <= 8):
+        raise ContentError("narration must be 3-8 sentences")
+    narration = []
+    for sent in narr_in:
+        sent = re.sub(r"\s+", " ", str(sent)).strip()
+        words = sent.split()
+        if not (3 <= len(words) <= 26):
+            raise ContentError("each narration sentence must be 3-26 words")
+        if re.search(r"https?://|#\w|@\w", sent):
+            raise ContentError("narration must not contain links, hashtags or handles")
+        narration.append(sent)
+    total_words = sum(len(x.split()) for x in narration)
+    if not (30 <= total_words <= 85):
+        raise ContentError(f"narration must be 30-85 words (got {total_words})")
+    caption = trim(str(data.get("caption", "")), 900, keep_breaks=True)
+    if len(caption) < 80:
+        raise ContentError("caption too short")
+    why = trim(str(data.get("why_it_matters", "")), 220)
+    if len(why) < 40:
+        raise ContentError("why_it_matters too short")
+    for label, txt in (("hook", hook), ("why_it_matters", why), ("caption", caption),
+                       *[(f"narration{i}", n) for i, n in enumerate(narration)]):
+        if is_generic(txt):
+            raise ContentError(f"{label} contains generic filler")
+    bad = numbers_grounded(" ".join([hook, why, caption] + narration), source_text)
+    if bad:
+        raise ContentError(f"numbers not found in sources: {bad[:3]}")
+    queries = []
+    for q in (data.get("broll_queries") or []):
+        if isinstance(q, str):
+            q = " ".join(re.sub(r"[^A-Za-z ]", " ", q).lower().split()[:5])
+            if q and q not in queries:
+                queries.append(q)
+    return {"hook": hook, "narration": narration, "broll_queries": queries[:5], "why_it_matters": why,
+            "caption": caption, "hashtags": build_hashtags(data.get("hashtags"), category)}
+
+
+def fallback_reel(cluster: dict) -> dict:
+    """Extractive narration when AI is unavailable: headline + up to two factual sentences from the sources."""
+    base = fallback_content(cluster)
+    lead = cluster["lead"]
+    sentences = [lead["title"].rstrip(".") + "."]
+    for sl in base["slides"]:
+        if sl["body"].strip() and sl["body"].strip().lower() != lead["title"].strip().lower():
+            sentences.append(sl["body"].strip())
+    narration = [trim(x, 170) for x in sentences[:3]]
+    return {"hook": base["hook"], "narration": narration, "broll_queries": [], "why_it_matters": None,
+            "caption": base["caption"], "hashtags": base["hashtags"]}
+
+
 # ----------------------------------------------------------------- fallback
 _SENT = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9“\"'])")
 
@@ -232,6 +293,41 @@ Return ONLY JSON with exactly this shape:
   "hook": "cover headline, 20-70 chars, accurate and punchy",
   "slides": [{{"heading": "2-5 words", "body": "1-2 short sentences, max 190 chars"}}],
   "why_it_matters": "1-2 sentences, 60-200 chars, specific impact",
+  "caption": "2 short paragraphs, 200-700 chars, no hashtags",
+  "hashtags": ["8 relevant lowercase hashtags without spaces"]
+}}
+
+SOURCE MATERIAL
+{source_text}
+"""
+    return prompt, source_text
+
+
+def build_reel_prompt(cluster: dict) -> tuple[str, str]:
+    parts = [f"[{a['source']}] {a['title']}\n{a['summary'][:700]}" for a in cluster["articles"][:3]]
+    source_text = "\n\n".join(parts)
+    prompt = f"""You write VOICEOVER SCRIPTS for fast, engaging Instagram Reels about news ({config.BRAND_NAME}).
+Category: "{cluster['category']}". Turn the SOURCE MATERIAL into a 20-25 second spoken script.
+
+STRICT RULES
+- Use ONLY facts in the SOURCE MATERIAL. Never invent numbers, quotes, names, dates or outcomes.
+- Write for the EAR: short, conversational, punchy sentences (max 18 words), active voice, no jargon.
+- Sentence 1 must be a strong hook that makes people keep watching (a surprising fact or question from the source).
+- 4-6 sentences, 45-70 words in total. Do NOT add a "follow us" line (it is added automatically).
+- No emojis, hashtags, links, handles, or filler like "developing story" or "stay tuned".
+- "why_it_matters" must be specific to THIS story.
+- "broll_queries": 4-5 stock-footage search terms, MOST SPECIFIC FIRST, each 2-3 plain words naming something a
+  camera can actually film (objects, places, actions). NO abstract words (issues, appeals, pending, policy, crisis,
+  trend), NO people names, brands or place names. Examples: election story -> "voting ballot box", "people voting
+  queue"; court story -> "courtroom gavel", "legal documents"; cricket win -> "cricket team celebration",
+  "stadium crowd cheering"; chip launch -> "circuit board", "smartphone screen"; flood -> "flood water street".
+
+Return ONLY JSON with exactly this shape:
+{{
+  "hook": "on-screen headline, 20-65 chars",
+  "narration": ["sentence one", "sentence two"],
+  "broll_queries": ["term one", "term two", "term three"],
+  "why_it_matters": "1-2 sentences, 60-200 chars",
   "caption": "2 short paragraphs, 200-700 chars, no hashtags",
   "hashtags": ["8 relevant lowercase hashtags without spaces"]
 }}
@@ -317,20 +413,27 @@ class AIWriter:
             return json.loads(m.group(0))
 
     def write(self, cluster: dict) -> tuple[dict, str]:
-        """Return (content, mode) where mode in {'ai','cache','fallback'}."""
-        key = f"{cluster['fingerprint']}:{cluster['lead']['id']}"
+        """Carousel copy. Returns (content, mode) where mode in {'ai','cache','fallback'}."""
+        return self._write(cluster, "carousel", build_prompt, validate_content, fallback_content)
+
+    def write_reel(self, cluster: dict) -> tuple[dict, str]:
+        """Voiceover script + caption for a Reel."""
+        return self._write(cluster, "reel", build_reel_prompt, validate_reel, fallback_reel)
+
+    def _write(self, cluster: dict, kind: str, build, validate, fallback) -> tuple[dict, str]:
+        key = f"{kind}:{cluster['fingerprint']}:{cluster['lead']['id']}"
         cache = read_json(self.cache_path, {})
         hit = cache.get(key)
         if hit and time.time() - hit["ts"] < config.AI_CACHE_TTL_HOURS * 3600:
             return hit["content"], "cache"
 
         if self.ai_enabled:
-            prompt, source_text = build_prompt(cluster)
+            prompt, source_text = build(cluster)
             last_err = ""
             for attempt in range(1, config.AI_MAX_ATTEMPTS + 1):
                 try:
                     p = prompt if not last_err else prompt + f"\nYour previous answer was rejected: {last_err}. Fix it."
-                    content = validate_content(self._parse(self._generate(p)), source_text, cluster["category"])
+                    content = validate(self._parse(self._generate(p)), source_text, cluster["category"])
                     cache[key] = {"ts": time.time(), "content": content}
                     cache = prune_dict_by_age(cache, max_entries=config.AI_CACHE_MAX_ENTRIES,
                                               max_age_hours=config.AI_CACHE_TTL_HOURS)
@@ -342,4 +445,4 @@ class AIWriter:
                                 mask_secrets(str(e))[:220])
                     if attempt < config.AI_MAX_ATTEMPTS:
                         self._sleep(2.0 * attempt)
-        return fallback_content(cluster), "fallback"
+        return fallback(cluster), "fallback"

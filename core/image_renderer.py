@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import unicodedata
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -18,7 +19,32 @@ log = logging.getLogger("renderer")
 
 W, H = 1080, 1350
 MARGIN = 96
-TEXT_W = W - 2 * MARGIN
+
+
+@dataclass(frozen=True)
+class Layout:
+    """Geometry of one canvas. REEL keeps text out of Instagram's top/bottom/right UI overlay zones."""
+    w: int
+    h: int
+    chrome_y: int       # brand + page counter
+    content_top: int
+    content_bottom: int
+    foot_y: int         # handle + date
+    cta_y: int          # closing-card call to action
+    hook_max_h: int
+    text_w: int
+    swipe_y: int | None  # "SWIPE" hint (feed carousels only)
+    hook_size: int = 104
+    heading_size: int = 76
+    body_size: int = 64
+    center_cover: bool = False  # vertically centre the cover block (used for tall Reels)
+
+
+FEED = Layout(1080, 1350, chrome_y=70, content_top=250, content_bottom=1040, foot_y=1254, cta_y=920,
+              hook_max_h=640, text_w=888, swipe_y=1160)
+REEL = Layout(1080, 1920, chrome_y=250, content_top=400, content_bottom=1400, foot_y=1455, cta_y=1130,
+              hook_max_h=820, text_w=834, swipe_y=None,
+              hook_size=124, heading_size=88, body_size=74, center_cover=True)
 
 _FONT_CANDIDATES_BOLD = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -132,29 +158,34 @@ def _draw_lines(draw, lines, font, x, y, lh, fill) -> int:
     return y
 
 
-def _background(category: str) -> Image.Image:
+def _background(category: str, L: Layout) -> Image.Image:
     top, bottom, accent = CATEGORY_STYLE.get(category, CATEGORY_STYLE["News"])
-    mask = Image.linear_gradient("L").resize((W, H))
-    img = Image.composite(Image.new("RGB", (W, H), hex_rgb(bottom)), Image.new("RGB", (W, H), hex_rgb(top)), mask)
-    # soft decorative circles
-    overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    mask = Image.linear_gradient("L").resize((L.w, L.h))
+    img = Image.composite(Image.new("RGB", (L.w, L.h), hex_rgb(bottom)),
+                          Image.new("RGB", (L.w, L.h), hex_rgb(top)), mask)
+    overlay = Image.new("RGBA", (L.w, L.h), (0, 0, 0, 0))
     od = ImageDraw.Draw(overlay)
     ar = hex_rgb(accent)
-    od.ellipse((W - 420, -260, W + 260, 420), fill=(*ar, 34))
-    od.ellipse((-300, H - 420, 380, H + 260), fill=(255, 255, 255, 18))
+    od.ellipse((L.w - 420, -260, L.w + 260, 420), fill=(*ar, 34))
+    od.ellipse((-300, L.h - 420, 380, L.h + 260), fill=(255, 255, 255, 18))
     return Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
 
 
-def _chrome(draw, idx: int, total: int, accent, now: datetime) -> None:
+def _accent(cluster: dict):
+    return hex_rgb(CATEGORY_STYLE.get(cluster["category"], CATEGORY_STYLE["News"])[2])
+
+
+def _chrome(draw, idx: int, total: int, accent, now: datetime, L: Layout) -> None:
     f_small = load_font(30, True)
-    draw.text((MARGIN, 70), clean_for_image(config.BRAND_NAME).upper(), font=f_small, fill=(255, 255, 255))
+    y = L.chrome_y
+    draw.text((MARGIN, y), clean_for_image(config.BRAND_NAME).upper(), font=f_small, fill=(255, 255, 255))
     right = f"{idx}/{total}"
-    draw.text((W - MARGIN - draw.textlength(right, font=f_small), 70), right, font=f_small, fill=accent)
-    draw.rectangle((MARGIN, 124, MARGIN + 90, 130), fill=accent)
+    draw.text((L.w - MARGIN - draw.textlength(right, font=f_small), y), right, font=f_small, fill=accent)
+    draw.rectangle((MARGIN, y + 54, MARGIN + 90, y + 60), fill=accent)
     f_foot = load_font(30, False)
-    draw.text((MARGIN, H - 96), clean_for_image(config.ACCOUNT_HANDLE), font=f_foot, fill=(230, 235, 245))
+    draw.text((MARGIN, L.foot_y), clean_for_image(config.ACCOUNT_HANDLE), font=f_foot, fill=(230, 235, 245))
     d = now.strftime("%d %b %Y").upper()
-    draw.text((W - MARGIN - draw.textlength(d, font=f_foot), H - 96), d, font=f_foot, fill=(200, 208, 225))
+    draw.text((L.w - MARGIN - draw.textlength(d, font=f_foot), L.foot_y), d, font=f_foot, fill=(200, 208, 225))
 
 
 def _pill(draw, xy, text, fill, fg, font) -> int:
@@ -166,81 +197,90 @@ def _pill(draw, xy, text, fill, fg, font) -> int:
     return y + h
 
 
-def render_cover(content: dict, cluster: dict, total: int, now: datetime) -> Image.Image:
-    img = _background(cluster["category"])
+def render_cover(content: dict, cluster: dict, total: int, now: datetime, L: Layout = FEED) -> Image.Image:
+    img = _background(cluster["category"], L)
     draw = ImageDraw.Draw(img)
-    accent = hex_rgb(CATEGORY_STYLE.get(cluster["category"], CATEGORY_STYLE["News"])[2])
-    _chrome(draw, 1, total, accent, now)
+    accent = _accent(cluster)
+    _chrome(draw, 1, total, accent, now, L)
     f_pill = load_font(32, True)
-    y = _pill(draw, (MARGIN, 250), cluster["category"].upper(), accent, (15, 15, 25), f_pill)
+    font, lines, lh = fit_text(draw, content["hook"], L.text_w, L.hook_max_h, start=L.hook_size, min_size=56)
+    pill_h = f_pill.size + 26
+    block_h = pill_h + 70 + len(lines) * lh
+    top = L.content_top
+    if L.center_cover:
+        top = max(L.content_top, (L.content_top + L.content_bottom) // 2 - block_h // 2)
+    y = _pill(draw, (MARGIN, top), cluster["category"].upper(), accent, (15, 15, 25), f_pill)
     if cluster.get("breaking"):
-        _pill(draw, (MARGIN + 320, 250), "BREAKING", (220, 38, 38), (255, 255, 255), f_pill)
-    font, lines, lh = fit_text(draw, content["hook"], TEXT_W, 640, start=104, min_size=56)
+        _pill(draw, (MARGIN + 320, top), "BREAKING", (220, 38, 38), (255, 255, 255), f_pill)
     _draw_lines(draw, lines, font, MARGIN, y + 70, lh, (255, 255, 255))
-    f_sw = load_font(36, True)
-    sw = "SWIPE  >"
-    draw.text((W - MARGIN - draw.textlength(sw, font=f_sw), H - 190), sw, font=f_sw, fill=accent)
+    if L.swipe_y:
+        f_sw = load_font(36, True)
+        sw = "SWIPE  >"
+        draw.text((L.w - MARGIN - draw.textlength(sw, font=f_sw), L.swipe_y), sw, font=f_sw, fill=accent)
     return img
 
 
-def render_content(slide: dict, cluster: dict, idx: int, total: int, now: datetime) -> Image.Image:
-    img = _background(cluster["category"])
+def render_content(slide: dict, cluster: dict, idx: int, total: int, now: datetime, L: Layout = FEED) -> Image.Image:
+    img = _background(cluster["category"], L)
     draw = ImageDraw.Draw(img)
-    accent = hex_rgb(CATEGORY_STYLE.get(cluster["category"], CATEGORY_STYLE["News"])[2])
-    _chrome(draw, idx, total, accent, now)
-    hfont, hlines, hlh = fit_text(draw, slide["heading"], TEXT_W, 220, start=76, min_size=44)
+    accent = _accent(cluster)
+    _chrome(draw, idx, total, accent, now, L)
+    hfont, hlines, hlh = fit_text(draw, slide["heading"], L.text_w, 240, start=L.heading_size, min_size=44)
     head_h = len(hlines) * hlh
-    max_body_h = H - 330 - 250 - head_h - 70
-    bfont, blines, blh = fit_text(draw, slide["body"], TEXT_W, max_body_h, start=64, min_size=34, bold=False,
+    max_body_h = (L.content_bottom - L.content_top) - head_h - 70
+    bfont, blines, blh = fit_text(draw, slide["body"], L.text_w, max_body_h, start=L.body_size, min_size=34, bold=False,
                                   spacing=1.35)
     block_h = head_h + 70 + len(blines) * blh
-    y0 = max(240, (H - block_h) // 2 - 20)  # vertically centred block
+    center = (L.content_top + L.content_bottom) // 2
+    y0 = max(L.content_top - 10, center - block_h // 2)  # vertically centred block
     y = _draw_lines(draw, hlines, hfont, MARGIN, y0, hlh, accent)
     draw.rectangle((MARGIN, y + 18, MARGIN + 140, y + 24), fill=(255, 255, 255))
     _draw_lines(draw, blines, bfont, MARGIN, y + 70, blh, (255, 255, 255))
     return img
 
 
-def render_closing(content: dict, cluster: dict, idx: int, total: int, now: datetime) -> Image.Image:
-    img = _background(cluster["category"])
+def render_closing(content: dict, cluster: dict, idx: int, total: int, now: datetime, L: Layout = FEED) -> Image.Image:
+    img = _background(cluster["category"], L)
     draw = ImageDraw.Draw(img)
-    accent = hex_rgb(CATEGORY_STYLE.get(cluster["category"], CATEGORY_STYLE["News"])[2])
-    _chrome(draw, idx, total, accent, now)
-    y = 250
+    accent = _accent(cluster)
+    _chrome(draw, idx, total, accent, now, L)
+    y = L.content_top
     why = content.get("why_it_matters")
     if why:
-        hfont = load_font(64, True)
-        draw.text((MARGIN, y), "Why it matters", font=hfont, fill=accent)
-        font, lines, lh = fit_text(draw, why, TEXT_W, 420, start=50, min_size=34, bold=False, spacing=1.35)
-        y = _draw_lines(draw, lines, font, MARGIN, y + 110, lh, (255, 255, 255))
-        y += 40
+        draw.text((MARGIN, y), "Why it matters", font=load_font(64, True), fill=accent)
+        font, lines, lh = fit_text(draw, why, L.text_w, 420, start=50, min_size=34, bold=False, spacing=1.35)
+        y = _draw_lines(draw, lines, font, MARGIN, y + 110, lh, (255, 255, 255)) + 40
     else:
-        y = 330
-    draw.rectangle((MARGIN, y, W - MARGIN, y + 3), fill=(255, 255, 255))
+        y = L.content_top + 80
+    draw.rectangle((MARGIN, y, L.w - MARGIN, y + 3), fill=(255, 255, 255))
     src = "Source: " + ", ".join(cluster["sources"][:3])
-    sfont, slines, slh = fit_text(draw, src, TEXT_W, 130, start=36, min_size=26, bold=False)
-    y = _draw_lines(draw, slines, sfont, MARGIN, y + 36, slh, (215, 222, 238))
+    sfont, slines, slh = fit_text(draw, src, L.text_w, 130, start=36, min_size=26, bold=False)
+    _draw_lines(draw, slines, sfont, MARGIN, y + 36, slh, (215, 222, 238))
     cta_font = load_font(58, True)
-    draw.text((MARGIN, H - 430), "Follow for daily updates", font=cta_font, fill=(255, 255, 255))
-    draw.text((MARGIN, H - 350), clean_for_image(config.ACCOUNT_HANDLE), font=cta_font, fill=accent)
-    f = load_font(34, False)
-    draw.text((MARGIN, H - 260), "Save   |   Share   |   Follow", font=f, fill=(230, 235, 245))
+    draw.text((MARGIN, L.cta_y), "Follow for daily updates", font=cta_font, fill=(255, 255, 255))
+    draw.text((MARGIN, L.cta_y + 80), clean_for_image(config.ACCOUNT_HANDLE), font=cta_font, fill=accent)
+    draw.text((MARGIN, L.cta_y + 170), "Save   |   Share   |   Follow", font=load_font(34, False), fill=(230, 235, 245))
     return img
 
 
-def render_post(content: dict, cluster: dict, out_dir: Path, stem: str, now: datetime | None = None) -> list[Path]:
-    """Render cover + content slides + closing card -> list of JPEG paths (2..10 files)."""
+def render_slides(content: dict, cluster: dict, now: datetime | None = None, layout: Layout = FEED) -> list[Image.Image]:
+    """Cover + content slides + closing card as in-memory images for the given layout."""
     now = now or datetime.now(ZoneInfo(config.TIMEZONE))
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
     slides = content["slides"][:8]
     total = len(slides) + 2
-    imgs = [render_cover(content, cluster, total, now)]
-    for i, s in enumerate(slides, start=2):
-        imgs.append(render_content(s, cluster, i, total, now))
-    imgs.append(render_closing(content, cluster, total, total, now))
+    imgs = [render_cover(content, cluster, total, now, layout)]
+    for i, sl in enumerate(slides, start=2):
+        imgs.append(render_content(sl, cluster, i, total, now, layout))
+    imgs.append(render_closing(content, cluster, total, total, now, layout))
+    return imgs
+
+
+def render_post(content: dict, cluster: dict, out_dir: Path, stem: str, now: datetime | None = None) -> list[Path]:
+    """Feed carousel -> list of JPEG paths (2..10 files)."""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
     paths = []
-    for i, im in enumerate(imgs, start=1):
+    for i, im in enumerate(render_slides(content, cluster, now, FEED), start=1):
         p = out_dir / f"{stem}_{i:02d}.jpg"
         im.convert("RGB").save(p, "JPEG", quality=90, optimize=True, subsampling=0)
         paths.append(p)

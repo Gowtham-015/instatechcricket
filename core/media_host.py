@@ -20,6 +20,7 @@ import requests
 from . import config
 
 log = logging.getLogger("media_host")
+VIDEO_EXT = {".mp4", ".mov"}
 
 
 @dataclass
@@ -60,11 +61,14 @@ class CloudinaryHost:
 
     def upload(self, path: Path, name: str) -> Hosted:
         public_id = f"insta_agent/{Path(name).stem}"
+        video = Path(name).suffix.lower() in VIDEO_EXT
+        rtype = "video" if video else "image"
         params = {"public_id": public_id, "timestamp": int(time.time())}
         data = {**params, "api_key": self.key, "signature": self._sign(params)}
         with open(path, "rb") as f:
-            r = self.http.post(f"https://api.cloudinary.com/v1_1/{self.cloud}/image/upload",
-                               data=data, files={"file": (name, f, "image/jpeg")}, timeout=60)
+            r = self.http.post(f"https://api.cloudinary.com/v1_1/{self.cloud}/{rtype}/upload", data=data,
+                               files={"file": (name, f, "video/mp4" if video else "image/jpeg")},
+                               timeout=300 if video else 60)
         if r.status_code != 200:
             try:
                 reason = (r.json().get("error") or {}).get("message", "")
@@ -74,14 +78,16 @@ class CloudinaryHost:
         url = r.json().get("secure_url", "")
         if not url.startswith("https://"):
             raise MediaHostError("Cloudinary returned no secure_url")
-        if not url.lower().endswith((".jpg", ".jpeg")):  # IG accepts JPEG only -> force it
-            url = url.rsplit(".", 1)[0] + ".jpg"
-        return Hosted(url, {"public_id": public_id})
+        want = ".mp4" if video else ".jpg"  # IG accepts JPEG images / MP4 video -> force the extension
+        if not url.lower().endswith((want, ".jpeg") if not video else (want,)):
+            url = url.rsplit(".", 1)[0] + want
+        return Hosted(url, {"public_id": public_id, "resource_type": rtype})
 
     def delete(self, ref: dict) -> None:
         params = {"public_id": ref["public_id"], "timestamp": int(time.time())}
         data = {**params, "api_key": self.key, "signature": self._sign(params)}
-        self.http.post(f"https://api.cloudinary.com/v1_1/{self.cloud}/image/destroy", data=data, timeout=30)
+        rtype = ref.get("resource_type", "image")
+        self.http.post(f"https://api.cloudinary.com/v1_1/{self.cloud}/{rtype}/destroy", data=data, timeout=30)
 
 
 class GitHubHost:
@@ -166,14 +172,19 @@ def get_host(kind: str | None = None):
     raise MediaHostError(f"Unknown MEDIA_HOST '{kind}'")
 
 
-def wait_until_public(url: str, *, attempts: int = 6, delay: float = 3.0, session=None, sleep=time.sleep) -> bool:
-    """Instagram fetches the URL itself: verify it is reachable and really a JPEG before asking it to."""
+def wait_until_public(url: str, *, kind: str = "image", attempts: int = 6, delay: float = 3.0, session=None,
+                      sleep=time.sleep) -> bool:
+    """Instagram fetches the URL itself: verify it is reachable and really a JPEG / MP4 before asking it to."""
     http = session or requests
     for i in range(attempts):
         try:
-            r = http.get(url, timeout=20, stream=True)
+            r = http.get(url, timeout=30, stream=True)
             ctype = r.headers.get("Content-Type", "").lower()
-            ok = r.status_code == 200 and ("image/jpeg" in ctype or "image/jpg" in ctype)
+            if kind == "video":  # some static hosts serve mp4 as octet-stream; Instagram sniffs the content
+                type_ok = ctype.startswith("video/") or "octet-stream" in ctype
+            else:
+                type_ok = "image/jpeg" in ctype or "image/jpg" in ctype
+            ok = r.status_code == 200 and type_ok
             r.close()
             if ok:
                 return True

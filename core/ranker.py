@@ -7,6 +7,7 @@ actual posts, instead of simply taking the globally highest scores.
 from __future__ import annotations
 
 import math
+import re
 from datetime import datetime, timezone
 
 from . import config
@@ -26,6 +27,30 @@ SENSITIVE = (
     "suicide", "rape", "sexual assault", "molest", "murder", "beheaded", "gore", "death toll", "dead body",
     "child abuse", "mass shooting", "stabbed", "lynching", "self-harm", "acid attack",
 )
+
+
+CATEGORY_KEYWORDS = {
+    "Entertainment": {"album", "band", "singer", "song", "songs", "music", "concert", "movie", "film", "actor", "actress",
+                      "trailer", "bollywood", "hollywood", "oscar", "grammy", "celebrity", "episode", "director",
+                      "netflix", "sitcom", "rapper", "tour", "premiere", "soundtrack", "boxoffice"},
+    "Sports": {"cricket", "wicket", "innings", "tournament", "league", "goal", "fifa", "ipl", "olympic", "olympics",
+               "coach", "football", "tennis", "nba", "nfl", "championship", "squad", "batsman", "bowler", "striker"},
+    "Technology": {"ai", "chip", "chips", "software", "app", "apps", "startup", "smartphone", "iphone", "android",
+                   "openai", "robot", "cybersecurity", "semiconductor", "laptop", "gpu", "cloud", "developer",
+                   "developers", "gadget", "algorithm", "chatbot", "processor", "browser"},
+}
+
+
+def refine_category(category: str, title: str, summary: str) -> str:
+    """Feeds mislabel stories (e.g. a music story in a tech feed). Only override when the feed's own category
+    has NO supporting keywords and another category is clearly indicated (title hits count double)."""
+    t_tok, s_tok = set(re.findall(r"[a-z0-9]+", title.lower())), set(re.findall(r"[a-z0-9]+", summary.lower()))
+    scores = {c: 2 * len(t_tok & kw) + len(s_tok & kw) for c, kw in CATEGORY_KEYWORDS.items()}
+    own = scores.get(category, 0)
+    best, best_score = max(scores.items(), key=lambda kv: kv[1])
+    if best != category and best_score >= 3 and own == 0:
+        return best
+    return category
 
 
 def is_sensitive(text: str) -> bool:
@@ -68,6 +93,7 @@ def build_clusters(articles: list[dict], now: datetime | None = None) -> list[di
         for a in group:
             cats[a["category"]] = cats.get(a["category"], 0) + 1
         category = sorted(cats, key=lambda c: (-cats[c], c))[0]
+        category = refine_category(category, lead["title"], " ".join(a["summary"] for a in group[:3]))
         newest = min(_age_hours(a["published"], now) for a in group)
         text = " ".join(a["title"] + " " + a["summary"] for a in group)
         bd = {
@@ -143,3 +169,18 @@ def ordered_candidates(clusters: list[dict], recent_categories: list[str], weigh
         exclude.add(c["fingerprint"])
         recent.append(c["category"])
     return picks
+
+
+def pick_format(recent_formats: list[str], weights: dict[str, float]) -> str:
+    """Choose carousel vs reel by the same deficit logic used for categories (honours CONTENT_FORMATS)."""
+    total = sum(weights.values())
+    n = len(recent_formats)
+    last = recent_formats[-1] if recent_formats else None
+    best, best_val = None, -1e9
+    for fmt in sorted(weights):
+        deficit = weights[fmt] / total - (recent_formats.count(fmt) / n if n else 0.0)
+        if fmt == last and len(weights) > 1:
+            deficit -= 0.05  # prefer alternating
+        if deficit > best_val:
+            best, best_val = fmt, deficit
+    return best or "carousel"

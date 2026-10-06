@@ -102,8 +102,11 @@ class InstagramClient:
         total = (item.get("config") or {}).get("quota_total", config.IG_DAILY_API_LIMIT)
         return int(item.get("quota_usage", 0)), int(total)
 
+    def container_info(self, container_id: str) -> dict:
+        return self._call("GET", container_id, {"fields": "status_code,status"})
+
     def container_status(self, container_id: str) -> str:
-        return self._call("GET", container_id, {"fields": "status_code"}).get("status_code", "")
+        return self.container_info(container_id).get("status_code", "")
 
     def permalink(self, media_id: str) -> str | None:
         try:
@@ -126,18 +129,22 @@ class InstagramClient:
             raise InstagramError("container creation returned no id")
         return cid
 
-    def wait_ready(self, container_id: str) -> None:
+    def wait_ready(self, container_id: str, *, timeout: float | None = None, interval: float | None = None) -> None:
+        timeout = self.poll_timeout if timeout is None else timeout
+        interval = self.poll_interval if interval is None else interval
         start = self._clock()
         while True:
-            status = self.container_status(container_id)
+            info = self.container_info(container_id)
+            status = info.get("status_code", "")
             if status == "FINISHED":
                 return
             if status in ("ERROR", "EXPIRED"):
-                raise InstagramError(f"container {container_id} status {status}")
-            if self._clock() - start > self.poll_timeout:
-                raise InstagramError(f"container {container_id} not ready after {int(self.poll_timeout)}s "
+                detail = str(info.get("status", ""))[:200]
+                raise InstagramError(f"container {container_id} status {status} {detail}".strip())
+            if self._clock() - start > timeout:
+                raise InstagramError(f"container {container_id} not ready after {int(timeout)}s "
                                      f"(last status {status or 'unknown'})", transient=True)
-            self._sleep(self.poll_interval)
+            self._sleep(interval)
 
     def create_carousel(self, image_urls: list[str], caption: str) -> str:
         if not 2 <= len(image_urls) <= 10:
@@ -178,9 +185,13 @@ class InstagramClient:
             pass
         return None
 
-    def publish_images(self, image_urls: list[str], caption: str) -> PublishResult:
-        container = (self.create_single(image_urls[0], caption) if len(image_urls) == 1
-                     else self.create_carousel(image_urls, caption))
+    def create_reel(self, video_url: str, caption: str, share_to_feed: bool = True) -> str:
+        cid = self._create({"media_type": "REELS", "video_url": video_url, "caption": caption,
+                            "share_to_feed": "true" if share_to_feed else "false"})
+        self.wait_ready(cid, timeout=config.IG_VIDEO_POLL_TIMEOUT, interval=5.0)  # video needs processing time
+        return cid
+
+    def _publish_with_recovery(self, container: str, caption: str) -> PublishResult:
         try:
             return self.publish_container(container)
         except InstagramError as e:
@@ -191,3 +202,12 @@ class InstagramClient:
                     log.warning("Publish response lost but post exists on Instagram; recovered")
                     return found
             raise
+
+    def publish_images(self, image_urls: list[str], caption: str) -> PublishResult:
+        container = (self.create_single(image_urls[0], caption) if len(image_urls) == 1
+                     else self.create_carousel(image_urls, caption))
+        return self._publish_with_recovery(container, caption)
+
+    def publish_reel(self, video_url: str, caption: str, share_to_feed: bool | None = None) -> PublishResult:
+        share = config.REEL_SHARE_TO_FEED if share_to_feed is None else share_to_feed
+        return self._publish_with_recovery(self.create_reel(video_url, caption, share), caption)

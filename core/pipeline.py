@@ -22,11 +22,13 @@ from .analytics import update_insights
 from .collector import collect_news
 from .dedupe import dedupe_batch, filter_published, similar_to_history
 from .health import Health, mask_secrets
-from .image_renderer import render_post
+from .image_renderer import REEL, render_post, render_slides
 from .instagram_client import InstagramClient, InstagramError
 from .media_host import MediaHostError, get_host, wait_until_public
-from .ranker import build_clusters, ordered_candidates
+from .ranker import build_clusters, ordered_candidates, pick_format
 from .schedule import current_slot
+from .reel_studio import make_reel
+from .video_renderer import encode_slideshow, encoder_available
 from .storage import (LockError, ProcessLock, parse_iso, prune_dict_by_age, prune_records, read_json,
                       write_json)
 
@@ -37,16 +39,18 @@ MAX_ATTEMPTS_PER_STORY = 2
 class Pipeline:
     def __init__(self, *, collector=collect_news, writer: AIWriter | None = None, host=None,
                  ig: InstagramClient | None = None, health: Health | None = None, now_fn=None,
-                 data_dir: Path | None = None, sleep=time.sleep, verify_public=wait_until_public):
+                 data_dir: Path | None = None, sleep=time.sleep, verify_public=wait_until_public,
+                 reel_maker=make_reel):
         self.data_dir = Path(data_dir or config.DATA_DIR)
         self.collector = collector
         self.writer = writer or AIWriter(cache_path=self.data_dir / "ai_cache.json")
         self._host = host
         self._ig = ig
-        self.health = health or Health(self.data_dir / "health_state.json")
         self.now = now_fn or (lambda: datetime.now(timezone.utc))
+        self.health = health or Health(self.data_dir / "health_state.json", now_fn=self.now)
         self.sleep = sleep
         self.verify_public = verify_public
+        self.reel_maker = reel_maker
         self.history_path = self.data_dir / "history.json"
         self.schedule_path = self.data_dir / "schedule_state.json"
         self.attempts_path = self.data_dir / "attempts.json"
@@ -73,16 +77,16 @@ class Pipeline:
                                                     max_days=config.HISTORY_MAX_DAYS))
 
     # ------------------------------------------------------------- run
-    def run_cycle(self, *, force: bool = False, dry_run: bool | None = None) -> dict:
+    def run_cycle(self, *, force: bool = False, dry_run: bool | None = None, fmt: str | None = None) -> dict:
         dry = config.DRY_RUN if dry_run is None else dry_run
         try:
             with ProcessLock(self.data_dir / "agent.lock"):
-                return self._run_locked(force=force, dry=dry)
+                return self._run_locked(force=force, dry=dry, fmt=fmt)
         except LockError as e:
             log.warning("Skipping: %s", e)
             return {"status": "skipped", "reason": "locked"}
 
-    def _run_locked(self, *, force: bool, dry: bool) -> dict:
+    def _run_locked(self, *, force: bool, dry: bool, fmt: str | None = None) -> dict:
         self._dry = dry
         now = self.now()
         local = now.astimezone(ZoneInfo(config.TIMEZONE))
@@ -136,6 +140,13 @@ class Pipeline:
         exclude = {fp for fp, v in attempts.items() if v.get("count", 0) >= MAX_ATTEMPTS_PER_STORY}
         recent_cats = [h["category"] for h in history if (ts := parse_iso(h.get("published_at")))
                        and now - ts < timedelta(hours=24) and not h.get("dry_run")]
+        weights = dict(config.CONTENT_FORMATS)
+        if "reel" in weights and not encoder_available():
+            log.warning("ffmpeg not available -> Reels disabled for this run (pip install imageio-ffmpeg)")
+            weights.pop("reel")
+        recent_fmts = [h.get("format", "carousel") for h in history if (ts := parse_iso(h.get("published_at")))
+                       and now - ts < timedelta(hours=24) and not h.get("dry_run")]
+        chosen_fmt = fmt or pick_format(recent_fmts, weights or {"carousel": 1})
         cands = ordered_candidates(clusters, recent_cats, config.CATEGORY_WEIGHTS, min_score=config.MIN_STORY_SCORE,
                                    exclude=exclude, limit=config.MAX_PUBLISH_ATTEMPTS_PER_RUN + 2,
                                    skip_sensitive=config.SKIP_SENSITIVE)
@@ -148,7 +159,7 @@ class Pipeline:
         last_error = ""
         for cand in cands[: config.MAX_PUBLISH_ATTEMPTS_PER_RUN]:
             try:
-                record = self._publish_candidate(cand, slot, dry, now)
+                record = self._publish_candidate(cand, slot, dry, now, chosen_fmt)
             except Exception as e:  # noqa: BLE001 - every failure path is handled the same way
                 last_error = mask_secrets(f"{type(e).__name__}: {e}")
                 log.error("Candidate failed (%s): %s", cand["lead"]["title"][:60], last_error)
@@ -159,7 +170,8 @@ class Pipeline:
                     return self._fail(f"Instagram token invalid/expired: {e}", token=True)
                 continue
             if dry:
-                return {"status": "dry_run", "title": record["title"], "files": record.get("files", [])}
+                return {"status": "dry_run", "format": record["format"], "title": record["title"],
+                        "files": record.get("files", [])}
             history.append(record)
             self.save_history(history)
             if slot:
@@ -173,8 +185,8 @@ class Pipeline:
                     self.save_history(history)
             except Exception:  # noqa: BLE001 - analytics must never break publishing
                 log.info("Insights refresh skipped")
-            return {"status": "published", "title": record["title"], "permalink": record.get("permalink"),
-                    "category": record["category"], "mode": record["mode"]}
+            return {"status": "published", "format": record["format"], "title": record["title"],
+                    "permalink": record.get("permalink"), "category": record["category"], "mode": record["mode"]}
         return self._fail(last_error or "all candidates failed")
 
     # ------------------------------------------------------------- helpers
@@ -186,42 +198,66 @@ class Pipeline:
             self.health.alert(message, force=True)
         return {"status": "failed", "error": mask_secrets(message)}
 
-    def _publish_candidate(self, cand: dict, slot: str | None, dry: bool, now: datetime) -> dict:
-        content, mode = self.writer.write(cand)
-        if mode == "fallback" and self.writer.ai_enabled:
-            log.warning("AI unavailable for this story -> using extractive fallback copy")
-            if not config.ALLOW_FALLBACK_POSTS:
-                raise RuntimeError("AI failed and ALLOW_FALLBACK_POSTS=false")
-        caption = compose_caption(content, cand)
+    def _publish_candidate(self, cand: dict, slot: str | None, dry: bool, now: datetime,
+                           fmt: str = "carousel") -> dict:
         stem = f"{now.strftime('%Y%m%d%H%M%S')}_{cand['fingerprint'][:8]}"
-        record = {
-            "id": stem, "title": cand["lead"]["title"], "url": cand["lead"]["url"], "category": cand["category"],
-            "fingerprint": cand["fingerprint"], "sources": cand["sources"], "score": cand["score"],
-            "breaking": cand["breaking"], "mode": mode, "slot": slot, "caption_len": len(caption),
-            "published_at": now.isoformat(),
-            "articles": [{"url": a["url"], "title": a["title"]} for a in cand["articles"][:6]],
-        }
+        local_now = now.astimezone(ZoneInfo(config.TIMEZONE))
         tmp = Path(tempfile.mkdtemp(prefix="igpost_"))
         try:
-            paths = render_post(content, cand, tmp, stem, now.astimezone(ZoneInfo(config.TIMEZONE)))
+            files: list[Path] = []
+            content, mode, credit, reel_info = None, "fallback", None, ""
+            if fmt == "reel":
+                try:
+                    if config.REEL_STYLE == "dynamic":
+                        content, mode = self.writer.write_reel(cand)
+                        self._warn_if_fallback(mode)
+                        res = self.reel_maker(content, cand, tmp / f"{stem}.mp4", music_path=config.MUSIC_PATH or None)
+                        files = [res.path]
+                        reel_info = f"voice={res.voiced} footage={res.footage}"
+                        credit = res.credit if config.FOOTAGE_CREDIT else None
+                    else:  # legacy "cards" style: info cards as a slideshow video
+                        content, mode = self.writer.write(cand)
+                        self._warn_if_fallback(mode)
+                        files = [encode_slideshow(render_slides(content, cand, local_now, REEL), tmp / f"{stem}.mp4",
+                                                  music_path=config.MUSIC_PATH or None)]
+                except Exception as e:  # noqa: BLE001 - never lose the post just because video failed
+                    log.warning("Reel could not be built (%s: %s) -> publishing a carousel instead",
+                                type(e).__name__, mask_secrets(str(e))[:160])
+                    fmt, files, content = "carousel", [], None
+            if fmt != "reel":
+                content, mode = self.writer.write(cand)
+                self._warn_if_fallback(mode)
+                files = render_post(content, cand, tmp, stem, local_now)
+            caption = compose_caption(content, cand, credit)
+            record = {
+                "id": stem, "title": cand["lead"]["title"], "url": cand["lead"]["url"], "category": cand["category"],
+                "fingerprint": cand["fingerprint"], "sources": cand["sources"], "score": cand["score"],
+                "breaking": cand["breaking"], "mode": mode, "slot": slot, "caption_len": len(caption),
+                "published_at": now.isoformat(), "format": fmt, "reel": reel_info,
+                "articles": [{"url": a["url"], "title": a["title"]} for a in cand["articles"][:6]],
+            }
             if dry:
                 out = config.PREVIEW_DIR
                 out.mkdir(parents=True, exist_ok=True)
-                files = []
-                for p in paths:
+                copied = []
+                for p in files:
                     shutil.copyfile(p, out / p.name)
-                    files.append(str(out / p.name))
+                    copied.append(str(out / p.name))
                 (out / f"{stem}_caption.txt").write_text(caption, encoding="utf-8")
-                record.update(dry_run=True, files=files)
+                record.update(dry_run=True, files=copied)
                 return record
             hosted = []
             try:
-                for p in paths:
+                for p in files:
                     hosted.append(self.host.upload(p, p.name))
+                kind = "video" if fmt == "reel" else "image"
                 for h in hosted:
-                    if not self.verify_public(h.url):
-                        raise MediaHostError(f"hosted image not publicly reachable as JPEG: {h.url.split('?')[0]}")
-                result = self.ig.publish_images([h.url for h in hosted], caption)
+                    if not self._reachable(h.url, kind):
+                        raise MediaHostError(f"hosted {kind} not publicly reachable: {h.url.split('?')[0]}")
+                if fmt == "reel":
+                    result = self.ig.publish_reel(hosted[0].url, caption)
+                else:
+                    result = self.ig.publish_images([h.url for h in hosted], caption)
             finally:
                 for h in hosted:
                     try:
@@ -229,7 +265,20 @@ class Pipeline:
                     except Exception:  # noqa: BLE001
                         log.info("Could not delete hosted media (will be cleaned up later)")
             record.update(media_id=result.media_id, permalink=result.permalink)
-            log.info("Published %s | %s | %s", cand["category"], record["title"][:70], result.permalink)
+            log.info("Published %s (%s %s) | %s | %s", cand["category"], fmt, reel_info, record["title"][:70],
+                     result.permalink)
             return record
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
+
+    def _warn_if_fallback(self, mode: str) -> None:
+        if mode == "fallback" and self.writer.ai_enabled:
+            log.warning("AI unavailable for this story -> using extractive fallback copy")
+            if not config.ALLOW_FALLBACK_POSTS:
+                raise RuntimeError("AI failed and ALLOW_FALLBACK_POSTS=false")
+
+    def _reachable(self, url: str, kind: str) -> bool:
+        try:
+            return self.verify_public(url, kind=kind)
+        except TypeError:  # injected test double without the `kind` parameter
+            return self.verify_public(url)

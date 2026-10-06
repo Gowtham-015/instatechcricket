@@ -9,6 +9,11 @@ on:
         description: "Force a post now (ignores slots / daily cap)"
         type: boolean
         default: false
+      format:
+        description: "Format for a manual run"
+        type: choice
+        options: [auto, carousel, reel]
+        default: auto
       dry_run:
         description: "Dry run (build the post, do not publish)"
         type: boolean
@@ -48,6 +53,10 @@ jobs:
           CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
           CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
           ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
+          TTS_VOICE: ${{ vars.TTS_VOICE || 'en-IN-NeerjaNeural' }}
+          REEL_STYLE: ${{ vars.REEL_STYLE || 'dynamic' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           MEDIA_HOST: ${{ vars.MEDIA_HOST || 'cloudinary' }}
@@ -56,10 +65,12 @@ jobs:
           BRAND_HASHTAGS: ${{ vars.BRAND_HASHTAGS }}
           POST_TIMES: ${{ vars.POST_TIMES || '09:00,13:00,18:00,21:00' }}
           CATEGORY_WEIGHTS: ${{ vars.CATEGORY_WEIGHTS || 'News:3,Technology:3,Sports:2,Entertainment:2' }}
+          CONTENT_FORMATS: ${{ vars.CONTENT_FORMATS || 'carousel:1,reel:1' }}
         run: |
           ARGS=""
           [ "${{ inputs.force }}" = "true" ] && ARGS="$ARGS --force"
           [ "${{ inputs.dry_run }}" = "true" ] && ARGS="$ARGS --dry-run"
+          case "${{ inputs.format }}" in carousel|reel) ARGS="$ARGS --format ${{ inputs.format }}";; esac
           python main.py run $ARGS
 
       - name: Commit state (small JSON files only)

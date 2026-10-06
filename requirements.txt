@@ -5,3 +5,5 @@ python-dotenv>=1.0,<2
 APScheduler>=3.10,<4
 tzdata>=2024.1
 google-genai>=1.0
+imageio-ffmpeg>=0.5
+edge-tts>=6.1

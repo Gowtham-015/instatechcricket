@@ -26,7 +26,8 @@
       }
     ],
     "media_id": "18636733570057841",
-    "permalink": "https://www.instagram.com/p/DeFau6Ck1Ev/"
+    "permalink": "https://www.instagram.com/p/DeFau6Ck1Ev/",
+    "insights": {}
   },
   {
     "id": "20261004194822_ca1c7c22",
@@ -50,7 +51,8 @@
       }
     ],
     "media_id": "18071447048775330",
-    "permalink": "https://www.instagram.com/p/DeFbFt7E_Ao/"
+    "permalink": "https://www.instagram.com/p/DeFbFt7E_Ao/",
+    "insights": {}
   },
   {
     "id": "20261004195119_560ba7cc",
@@ -74,7 +76,8 @@
       }
     ],
     "media_id": "18246001873310804",
-    "permalink": "https://www.instagram.com/p/DeFbZwWE08O/"
+    "permalink": "https://www.instagram.com/p/DeFbZwWE08O/",
+    "insights": {}
   },
   {
     "id": "20261004195246_0882b6ab",
@@ -98,7 +101,15 @@
       }
     ],
     "media_id": "18095911202541375",
-    "permalink": "https://www.instagram.com/p/DeFbmYmEyQU/"
+    "permalink": "https://www.instagram.com/p/DeFbmYmEyQU/",
+    "insights": {
+      "reach": 0,
+      "saved": 0,
+      "shares": 0,
+      "likes": 0,
+      "comments": 0,
+      "total_interactions": 0
+    }
   },
   {
     "id": "20261004195534_63ec4877",
@@ -122,6 +133,163 @@
       }
     ],
     "media_id": "18412775164083757",
-    "permalink": "https://www.instagram.com/p/DeFb7Jek0jJ/"
+    "permalink": "https://www.instagram.com/p/DeFb7Jek0jJ/",
+    "insights": {
+      "reach": 0,
+      "saved": 0,
+      "shares": 0,
+      "likes": 0,
+      "comments": 0,
+      "total_interactions": 0
+    }
+  },
+  {
+    "id": "20261004234204_f8c95d97",
+    "title": "Prick’s theatrical industrial punk is perfect for spooky season",
+    "url": "https://www.theverge.com/entertainment/1004595/prick-industrial-glam-punk-album-review",
+    "category": "Technology",
+    "fingerprint": "f8c95d971f17df",
+    "sources": [
+      "The Verge"
+    ],
+    "score": 57.4,
+    "breaking": false,
+    "mode": "cache",
+    "slot": null,
+    "caption_len": 827,
+    "published_at": "2026-10-04T23:42:04.703474+00:00",
+    "articles": [
+      {
+        "url": "https://www.theverge.com/entertainment/1004595/prick-industrial-glam-punk-album-review",
+        "title": "Prick’s theatrical industrial punk is perfect for spooky season"
+      }
+    ],
+    "format": "reel",
+    "media_id": "18107113736351554",
+    "permalink": "https://www.instagram.com/reel/DeF15tEDzYr/",
+    "insights": {
+      "reach": 18,
+      "saved": 0,
+      "shares": 0,
+      "likes": 0,
+      "comments": 0,
+      "total_interactions": 0
+    }
+  },
+  {
+    "id": "20261005000326_b13b1383",
+    "title": "Tom Cruise’s ‘Digger’ Buried at Box Office With $8M as ‘Verity’ Wins Weekend",
+    "url": "https://www.hollywoodreporter.com/movies/movie-news/tom-cruise-digger-bombs-box-office-opening-verity-1236721814/",
+    "category": "Entertainment",
+    "fingerprint": "b13b138389e518",
+    "sources": [
+      "Hollywood Reporter",
+      "Times of India Entertainment"
+    ],
+    "score": 61.1,
+    "breaking": false,
+    "mode": "cache",
+    "slot": null,
+    "caption_len": 974,
+    "published_at": "2026-10-05T00:03:26.701199+00:00",
+    "articles": [
+      {
+        "url": "https://www.hollywoodreporter.com/movies/movie-news/tom-cruise-digger-bombs-box-office-opening-verity-1236721814/",
+        "title": "Tom Cruise’s ‘Digger’ Buried at Box Office With $8M as ‘Verity’ Wins Weekend"
+      },
+      {
+        "url": "https://timesofindia.indiatimes.com/entertainment/english/hollywood/box-office/tom-cruise-starrer-digger-flops-at-box-office-anne-hathaway-dakota-johnson-starrer-verity-takes-no-1-spot/articleshow/134680389.cms",
+        "title": "Tom Cruise's 'Digger' FLOPS; 'Verity' tops box office"
+      }
+    ],
+    "format": "reel",
+    "media_id": "17911420785542768",
+    "permalink": "https://www.instagram.com/reel/DeF4a4KFF__/",
+    "insights": {
+      "reach": 52,
+      "saved": 0,
+      "shares": 0,
+      "likes": 1,
+      "comments": 0,
+      "total_interactions": 1
+    }
+  },
+  {
+    "id": "20261005200703_852c3b89",
+    "title": "Messi’s Argentina farewell: When, where and how to watch in India",
+    "url": "https://timesofindia.indiatimes.com/sports/football/top-stories/messis-argentina-farewell-is-here-everything-you-need-to-know-when-where-and-how-to-watch-his-final-game-in-india/articleshow/134712400.cms",
+    "category": "Sports",
+    "fingerprint": "852c3b891b21aa",
+    "sources": [
+      "TOI Sports"
+    ],
+    "score": 58.9,
+    "breaking": false,
+    "mode": "ai",
+    "slot": null,
+    "caption_len": 824,
+    "published_at": "2026-10-05T20:07:03.758297+00:00",
+    "format": "reel",
+    "reel": "voice=True footage=pixabay",
+    "articles": [
+      {
+        "url": "https://timesofindia.indiatimes.com/sports/football/top-stories/messis-argentina-farewell-is-here-everything-you-need-to-know-when-where-and-how-to-watch-his-final-game-in-india/articleshow/134712400.cms",
+        "title": "Messi’s Argentina farewell: When, where and how to watch in India"
+      }
+    ],
+    "media_id": "17984396871108382",
+    "permalink": "https://www.instagram.com/reel/DeIDTJHjxkG/"
+  },
+  {
+    "id": "20261005202515_a3f64e95",
+    "title": "19,000 West Bengal voters to miss bypolls as appeals remain pending in tribunals",
+    "url": "https://www.thehindu.com/news/national/west-bengal/crawling-pace-in-west-bengal-appellate-tribunals-keep-voters-in-limbo/article71547840.ece",
+    "category": "News",
+    "fingerprint": "a3f64e953002ba",
+    "sources": [
+      "The Hindu"
+    ],
+    "score": 60.5,
+    "breaking": false,
+    "mode": "cache",
+    "slot": null,
+    "caption_len": 747,
+    "published_at": "2026-10-05T20:25:15.860992+00:00",
+    "format": "reel",
+    "reel": "voice=True footage=pixabay",
+    "articles": [
+      {
+        "url": "https://www.thehindu.com/news/national/west-bengal/crawling-pace-in-west-bengal-appellate-tribunals-keep-voters-in-limbo/article71547840.ece",
+        "title": "19,000 West Bengal voters to miss bypolls as appeals remain pending in tribunals"
+      }
+    ],
+    "media_id": "18132828664661754",
+    "permalink": "https://www.instagram.com/reel/DeIEjDbja0s/"
+  },
+  {
+    "id": "20261006043212_5c321d25",
+    "title": "South Korea plans to develop $3.5 billion frontier AI model starting next year",
+    "url": "https://economictimes.indiatimes.com/tech/artificial-intelligence/south-korea-plans-to-develop-3-5-billion-frontier-ai-model-starting-next-year/articleshow/134721256.cms",
+    "category": "Technology",
+    "fingerprint": "5c321d2540c706",
+    "sources": [
+      "Economic Times Tech"
+    ],
+    "score": 61.6,
+    "breaking": false,
+    "mode": "cache",
+    "slot": "2026-10-06 09:00",
+    "caption_len": 828,
+    "published_at": "2026-10-06T04:32:12.172854+00:00",
+    "format": "reel",
+    "reel": "voice=True footage=pixabay",
+    "articles": [
+      {
+        "url": "https://economictimes.indiatimes.com/tech/artificial-intelligence/south-korea-plans-to-develop-3-5-billion-frontier-ai-model-starting-next-year/articleshow/134721256.cms",
+        "title": "South Korea plans to develop $3.5 billion frontier AI model starting next year"
+      }
+    ],
+    "media_id": "18091552844663974",
+    "permalink": "https://www.instagram.com/reel/DeI76VGlCjA/"
   }
 ]

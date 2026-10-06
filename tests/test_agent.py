@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import tempfile
 import time
 import unittest
@@ -16,7 +17,8 @@ from zoneinfo import ZoneInfo
 import requests
 from PIL import Image
 
-from core import ai_writer, config, dedupe, health, image_renderer, media_host, ranker, schedule, storage
+from core import (clip_post, ai_writer, config, dedupe, health, image_renderer, media_host, ranker, reel_renderer, reel_studio,
+                  schedule, stock, storage, tts, video_renderer)
 from core.ai_writer import AIWriter, ContentError
 from core.instagram_client import InstagramClient, InstagramError
 from core.pipeline import Pipeline
@@ -64,6 +66,8 @@ class FakeIG:
                 self.n_child += 1
                 return Resp(200, {"id": f"c{self.n_child}"})
             self.last_caption = data.get("caption", "")
+            if data.get("media_type") == "REELS":
+                return Resp(200, {"id": "reel1"})
             return Resp(200, {"id": "parent" if data.get("media_type") == "CAROUSEL" else "single"})
         if path == f"{self.uid}/media_publish":
             self.published += 1
@@ -130,10 +134,28 @@ VALID = {
 }
 
 
+REEL_VALID = {
+    "hook": "Apple unveils a new chip built for thin laptops",
+    "narration": [
+        "Apple just announced a brand new processor for thin laptops.",
+        "The company says it is built for students and remote workers.",
+        "The big promise is longer battery life during a normal day.",
+        "Pricing details will be shared later this year.",
+    ],
+    "broll_queries": ["Laptop Typing!", "technology circuit board", "laptop typing"],
+    "why_it_matters": "Longer battery life means fewer charging breaks for students and remote workers on thin laptops.",
+    "caption": "Apple has announced a new processor for thin laptops. The company says it targets students and remote workers "
+               "who want longer battery life.\n\nPricing details are expected later this year, so buyers can plan ahead.",
+    "hashtags": ["#Apple", "chips", "#laptops"],
+}
+
+
 class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         p = mock.patch.multiple(config, DATA_DIR=self.tmp, PREVIEW_DIR=self.tmp / "preview",
+                                CONTENT_FORMATS={"carousel": 1}, VIDEO_SECONDS_PER_SLIDE=0.6, VIDEO_FPS=10,
+                                REEL_STYLE="cards", PEXELS_API_KEY="", PIXABAY_API_KEY="", STOCK_PROVIDER="auto", TTS_PROVIDER="none", BROLL_DIR="", MUSIC_PATH="",
                                 ACCOUNT_HANDLE="@dailypulse", BRAND_NAME="Daily Pulse", ALERT_WEBHOOK_URL="")
         p.start()
         self.addCleanup(p.stop)
@@ -168,6 +190,18 @@ class TestRanker(Base):
     def test_freshness_decays(self):
         self.assertGreater(ranker.freshness_score(0), ranker.freshness_score(6))
         self.assertAlmostEqual(ranker.freshness_score(6), 50.0, places=1)
+
+    def test_category_refined_when_feed_label_is_wrong(self):
+        """Seen in a real post: a music story from a tech feed was labelled TECHNOLOGY."""
+        a = make_article(1, "Technology", "The Verge")
+        a["title"] = "Trent Reznor's production work on Prick's debut album revealed"
+        a["summary"] = ("While recording the record, the musician contributed to his friend's band project. "
+                        "The album credits him on four songs.")
+        self.assertEqual(ranker.build_clusters([a])[0]["category"], "Entertainment")
+        t = make_article(2, "Technology", "Wired")
+        t["title"] = "OpenAI chip startup unveils new processor for AI developers"
+        self.assertEqual(ranker.build_clusters([t])[0]["category"], "Technology")
+        self.assertEqual(ranker.refine_category("News", "Council approves new budget plan", "Details of the plan."), "News")
 
     def test_sensitive_skipped(self):
         a = make_article(1)
@@ -619,7 +653,8 @@ class TestMedia(Base):
 
 
 # ------------------------------------------------------------------ end-to-end pipeline
-class TestPipeline(Base):
+class PipelineFixture(Base):
+    """Shared fakes for pipeline tests (no tests of its own)."""
     NOW = datetime(2026, 10, 5, 3, 40, tzinfo=timezone.utc)  # 09:10 IST -> slot 09:00 due
 
     def build(self, articles=None, ig=None, now_fn=None, ai=lambda p: json.dumps(VALID)):
@@ -631,6 +666,8 @@ class TestPipeline(Base):
                         host=self.host, ig=make_ig(self.ig_session), now_fn=now_fn or (lambda: self.NOW),
                         data_dir=self.tmp, sleep=lambda s: None, verify_public=lambda u: True)
 
+
+class TestPipeline(PipelineFixture):
     def test_happy_path_publishes_records_and_cleans_up(self):
         p = self.build()
         res = p.run_cycle()
@@ -731,6 +768,855 @@ class TestPipeline(Base):
         cats = [h["category"] for h in p.load_history()]
         for c in ("News", "Technology", "Sports", "Entertainment"):
             self.assertGreaterEqual(cats.count(c), 2, cats)
+
+
+# ------------------------------------------------------------------ video / reels
+class TestReels(Base):
+    def slides(self):
+        content = ai_writer.validate_content(VALID, "", "Technology")
+        return image_renderer.render_slides(content, make_cluster(), layout=image_renderer.REEL)
+
+    def test_reel_layout_is_9x16_and_text_inside_safe_zone(self):
+        for im in self.slides():
+            self.assertEqual(im.size, (1080, 1920))
+        L = image_renderer.REEL
+        self.assertGreaterEqual(L.content_top, 380)       # clear of the top UI
+        self.assertLessEqual(L.content_bottom, 1920 - 450)  # clear of caption/buttons
+        self.assertLess(L.text_w, 1080 - 2 * image_renderer.MARGIN + 1)
+
+    def test_encoded_video_matches_instagram_specs(self):
+        out = video_renderer.encode_slideshow(self.slides(), self.tmp / "r.mp4", seconds_per_slide=0.6, fps=10)
+        info = video_renderer.probe(out)
+        self.assertEqual((info["video"], info["audio"], info["size"]), ("h264", "aac", (1080, 1920)))
+        self.assertGreaterEqual(info["duration"], 4.5)      # never below Instagram's minimum, even with tiny settings
+        self.assertLess(info["duration"], 90)
+        self.assertLess(out.stat().st_size, 100_000_000)
+
+    def test_encoder_errors_are_clear(self):
+        with self.assertRaises(video_renderer.VideoError):
+            video_renderer.encode_slideshow(self.slides()[:1], self.tmp / "a.mp4")
+        with mock.patch.object(video_renderer, "find_ffmpeg", return_value=None):
+            with self.assertRaises(video_renderer.VideoError) as cm:
+                video_renderer.encode_slideshow(self.slides(), self.tmp / "b.mp4")
+            self.assertIn("imageio-ffmpeg", str(cm.exception))
+        with self.assertRaises(video_renderer.VideoError):  # would exceed the 90 s API cap
+            video_renderer.encode_slideshow(self.slides(), self.tmp / "c.mp4", seconds_per_slide=30)
+
+    def test_missing_music_file_falls_back_to_silence(self):
+        out = video_renderer.encode_slideshow(self.slides(), self.tmp / "m.mp4", seconds_per_slide=0.6, fps=10,
+                                              music_path=str(self.tmp / "nope.mp3"))
+        self.assertEqual(video_renderer.probe(out)["audio"], "aac")
+
+    def test_instagram_reel_flow(self):
+        s = FakeIG()
+        res = make_ig(s).publish_reel("https://cdn.test/v.mp4", "cap", share_to_feed=True)
+        posts = [c for c in s.calls if c[0] == "POST"]
+        self.assertEqual([p[1] for p in posts], ["U/media", "U/media_publish"])
+        self.assertEqual(posts[0][2]["media_type"], "REELS")
+        self.assertEqual(posts[0][2]["video_url"], "https://cdn.test/v.mp4")
+        self.assertEqual(posts[0][2]["share_to_feed"], "true")
+        self.assertEqual(posts[1][2]["creation_id"], "reel1")
+        self.assertEqual(res.media_id, "m1")
+
+    def test_reel_processing_error_shows_instagram_reason(self):
+        s = FakeIG()
+        s.overrides["GET:reel1"] = [Resp(200, {"status_code": "ERROR", "status": "Error: video codec not supported"})]
+        with self.assertRaises(InstagramError) as cm:
+            make_ig(s).publish_reel("https://cdn.test/v.mp4", "cap")
+        self.assertIn("codec not supported", str(cm.exception))
+        self.assertEqual(s.published, 0)
+
+    def test_reel_ambiguous_publish_recovered(self):
+        s = FakeIG()
+        s.overrides["POST:U/media_publish"] = [requests.Timeout()]
+        s.overrides["GET:U/media"] = [Resp(200, {"data": [{"id": "m7", "caption": "Reel caption", "permalink": "p"}]})]
+        self.assertEqual(make_ig(s).publish_reel("https://cdn.test/v.mp4", "Reel caption").media_id, "m7")
+        self.assertEqual(s.published, 0)
+
+    def test_pick_format_honours_weights_and_alternates(self):
+        seq, recent = [], []
+        for _ in range(6):
+            f = ranker.pick_format(recent, {"carousel": 1, "reel": 1})
+            seq.append(f)
+            recent.append(f)
+        self.assertEqual(seq, ["carousel", "reel"] * 3)
+        recent, counts = [], {"carousel": 0, "reel": 0}
+        for _ in range(12):
+            f = ranker.pick_format(recent, {"carousel": 2, "reel": 1})
+            recent.append(f)
+            counts[f] += 1
+        self.assertEqual(counts, {"carousel": 8, "reel": 4})
+        self.assertEqual(ranker.pick_format([], {"reel": 1}), "reel")
+
+    def test_cloudinary_video_upload_and_delete(self):
+        calls = []
+
+        class S:
+            def post(self, url, data=None, files=None, timeout=None):
+                calls.append(url)
+                return Resp(200, {"secure_url": "https://res.cloudinary.com/c/video/upload/v1/insta_agent/v.mp4"})
+        host = media_host.CloudinaryHost("c", "k", "s", session=S())
+        v = self.tmp / "v.mp4"
+        v.write_bytes(b"0" * 100)
+        h = host.upload(v, "v.mp4")
+        self.assertTrue(calls[0].endswith("/video/upload"))
+        self.assertTrue(h.url.endswith(".mp4"))
+        host.delete(h.ref)
+        self.assertTrue(calls[1].endswith("/video/destroy"))
+
+    def test_wait_until_public_video(self):
+        def sess(ctype):
+            class S:
+                def get(self, url, **kw):
+                    return Resp(200, headers={"Content-Type": ctype})
+            return S()
+        ok = lambda c: media_host.wait_until_public("https://x/v.mp4", kind="video", attempts=1, session=sess(c))  # noqa: E731
+        self.assertTrue(ok("video/mp4"))
+        self.assertTrue(ok("application/octet-stream"))
+        self.assertFalse(ok("text/html"))
+
+    def test_config_rejects_unknown_format(self):
+        with mock.patch.object(config, "CONTENT_FORMATS", {"story": 1}):
+            self.assertTrue(any("CONTENT_FORMATS" in p for p in config.validate("dry")))
+
+
+class TestReelPipeline(PipelineFixture):
+    """Same pipeline fixtures, but publishing video."""
+
+    def run_reel(self, **kw):
+        kinds = []
+        p = self.build(**kw)
+        p.verify_public = lambda url, kind="image": (kinds.append(kind), True)[1]
+        with mock.patch.object(config, "CONTENT_FORMATS", {"reel": 1}):
+            res = p.run_cycle()
+        return p, res, kinds
+
+    def test_reel_published_and_cleaned_up(self):
+        p, res, kinds = self.run_reel()
+        self.assertEqual((res["status"], res["format"]), ("published", "reel"), res)
+        self.assertEqual(kinds, ["video"])
+        create = next(c for c in self.ig_session.calls if c[0] == "POST" and c[2].get("media_type") == "REELS")
+        self.assertTrue(create[2]["video_url"].endswith(".mp4"))
+        self.assertEqual(p.load_history()[0]["format"], "reel")
+        left = list((self.tmp / "public").glob("*")) if (self.tmp / "public").exists() else []
+        self.assertEqual(left, [])
+
+    def test_video_failure_falls_back_to_carousel(self):
+        with mock.patch("core.pipeline.encode_slideshow", side_effect=video_renderer.VideoError("boom")):
+            p, res, _ = self.run_reel()
+        self.assertEqual((res["status"], res["format"]), ("published", "carousel"), res)
+        self.assertEqual(self.ig_session.published, 1)
+
+    def test_no_ffmpeg_disables_reels_instead_of_failing(self):
+        with mock.patch("core.pipeline.encoder_available", return_value=False):
+            p, res, _ = self.run_reel()
+        self.assertEqual((res["status"], res["format"]), ("published", "carousel"), res)
+
+    def test_dry_run_reel_writes_mp4_preview(self):
+        p = self.build()
+        res = p.run_cycle(dry_run=True, fmt="reel")
+        self.assertEqual((res["status"], res["format"]), ("dry_run", "reel"))
+        self.assertTrue(any(f.endswith(".mp4") and Path(f).exists() for f in res["files"]))
+        self.assertEqual(self.ig_session.published, 0)
+
+    def test_formats_alternate_across_posts(self):
+        arts = [make_article(i, "News", "BBC News", now=self.NOW) for i in range(10)]
+        t = [self.NOW]
+        p = self.build(articles=arts, now_fn=lambda: t[0])
+        with mock.patch.multiple(config, CONTENT_FORMATS={"carousel": 1, "reel": 1}, MIN_POST_INTERVAL_MINUTES=0):
+            fmts = []
+            for _ in range(4):
+                fmts.append(p.run_cycle(force=True)["format"])
+                t[0] += timedelta(hours=1)
+        self.assertEqual(fmts, ["carousel", "reel", "carousel", "reel"])
+
+
+
+# ------------------------------------------------------------------ dynamic reels (footage + voice + captions)
+class FakeSession:
+    """requests-like session for Pexels search + clip download."""
+
+    def __init__(self, videos=None, status=200):
+        self.videos, self.status, self.calls = videos or [], status, []
+
+    def get(self, url, headers=None, params=None, timeout=None, stream=False):
+        self.calls.append((url, headers, params))
+        if "search" in url:
+            return Resp(self.status, {"videos": self.videos})
+
+        class Dl(Resp):
+            def __enter__(s): return s
+            def __exit__(s, *a): return False
+            def iter_content(s, n): yield b"0" * 20_000
+        return Dl(200)
+
+
+def pexels_video(i, files, duration=9, slug="stadium-crowd-cheering"):
+    return {"id": i, "duration": duration, "url": f"https://www.pexels.com/video/{slug}-{i}/", "video_files": files}
+
+
+def mp4_file(w, h, link="https://v.test/a.mp4"):
+    return {"file_type": "video/mp4", "width": w, "height": h, "link": link}
+
+
+class TestVoice(Base):
+    def test_distribute_words_covers_duration_and_pauses_at_sentences(self):
+        words = tts.distribute_words("Hello world. This is a test, right?", 10.0)
+        self.assertEqual(len(words), 7)
+        self.assertAlmostEqual(words[-1][2], 10.0, places=3)
+        self.assertTrue(all(a[2] <= b[1] + 1e-9 for a, b in zip(words, words[1:])))
+        dur = lambda w: w[2] - w[1]  # noqa: E731
+        self.assertGreater(dur(words[1]), dur(words[0]) * 0.6)  # full stop earns extra time
+
+    def test_boundaries_mapping_requires_matching_word_count(self):
+        ok = tts.words_from_boundaries("one two", [(0.0, 0.4, "one"), (0.5, 0.4, "two")])
+        self.assertEqual([w[0] for w in ok], ["one", "two"])
+        self.assertEqual(tts.words_from_boundaries("one two three", [(0.0, 0.4, "one")]), [])
+
+    def test_edge_provider_uses_word_boundaries(self):
+        class Com:
+            def __init__(self, text, voice, rate="+0%", boundary="SentenceBoundary"):
+                assert boundary == "WordBoundary"  # edge-tts 7 defaults to sentence boundaries
+            async def stream(self):
+                yield {"type": "audio", "data": b"ID3" + b"0" * 5000}
+                yield {"type": "WordBoundary", "offset": 0, "duration": 4_000_000, "text": "Hello"}
+                yield {"type": "WordBoundary", "offset": 5_000_000, "duration": 4_000_000, "text": "there"}
+                yield {"type": "WordBoundary", "offset": 12_000_000, "duration": 6_000_000, "text": "friends."}
+        with mock.patch("edge_tts.Communicate", Com), mock.patch.object(config, "TTS_PROVIDER", "edge"):
+            vo = tts.synthesize("Hello there friends.", self.tmp / "v")
+        self.assertIsNotNone(vo)
+        self.assertEqual(vo.provider, "edge")
+        self.assertEqual([w[0] for w in vo.words], ["Hello", "there", "friends."])
+        self.assertAlmostEqual(vo.words[2][1], 1.2, places=2)
+        self.assertGreater(vo.duration, 1.5)
+
+    def test_failing_providers_never_raise(self):
+        class Boom:
+            def __init__(self, *a, **k): raise RuntimeError("403 from service")
+        with mock.patch("edge_tts.Communicate", Boom), mock.patch.object(config, "GEMINI_API_KEY", ""):
+            self.assertIsNone(tts.synthesize("Hello world again.", self.tmp / "v", provider="auto"))
+        self.assertIsNone(tts.synthesize("Hello", self.tmp / "v", provider="none"))
+        self.assertIsNone(tts.synthesize("   ", self.tmp / "v", provider="edge"))
+
+
+class TestStock(Base):
+    def test_pick_file_prefers_portrait_near_1080_and_skips_4k(self):
+        v = pexels_video(1, [mp4_file(2160, 3840, "u4k"), mp4_file(720, 1280, "u720"), mp4_file(1080, 1920, "u1080"),
+                             mp4_file(1920, 1080, "landscape"), {"file_type": "video/webm", "width": 1080, "height": 1920, "link": "w"}])
+        self.assertEqual(stock.pick_file(v)["link"], "u1080")
+        self.assertIsNone(stock.pick_file(pexels_video(2, [mp4_file(1920, 1080)])))
+
+    def test_fetch_clips_downloads_and_sends_key_and_portrait_filter(self):
+        sess = FakeSession([pexels_video(1, [mp4_file(1080, 1920)]), pexels_video(2, [mp4_file(1080, 1920)])])
+        px = stock.PexelsClient("KEY123", session=sess)
+        clips = px.fetch_clips(["stadium crowd", "crowd cheering"], self.tmp / "s", wanted=2)
+        self.assertEqual(len(clips), 2)
+        self.assertTrue(all(c.exists() and c.stat().st_size > 0 for c in clips))
+        url, headers, params = sess.calls[0]
+        self.assertEqual(headers["Authorization"], "KEY123")
+        self.assertEqual(params["orientation"], "portrait")
+
+    def test_failures_degrade_to_empty_list(self):
+        self.assertFalse(stock.PexelsClient("", session=FakeSession()).enabled)
+        px = stock.PexelsClient("K", session=FakeSession(status=401))
+        self.assertEqual(px.fetch_clips(["a b"], self.tmp / "s2", wanted=2), [])
+        short = FakeSession([pexels_video(1, [mp4_file(1080, 1920)], duration=2)])
+        self.assertEqual(stock.PexelsClient("K", session=short).fetch_clips(["a"], self.tmp / "s3", wanted=1), [])
+
+    def test_queries_are_cleaned_deduped_and_backed_by_category_defaults(self):
+        q = stock.queries_for("Sports", ["Stadium Crowd!!", "stadium crowd", "player 7 scores"])
+        self.assertEqual(q[0], "stadium crowd")
+        self.assertEqual(q.count("stadium crowd"), 1)
+        self.assertIn("player scores", q)
+        self.assertIn("athlete running", q)
+
+    def test_local_clips(self):
+        d = self.tmp / "mine"
+        d.mkdir()
+        (d / "a.mp4").write_bytes(b"0")
+        (d / "notes.txt").write_text("x")
+        self.assertEqual([p.name for p in stock.local_clips(d, 3)], ["a.mp4"])
+        self.assertEqual(stock.local_clips("", 3), [])
+
+
+class TestReelScript(Base):
+    SRC = ("Apple announced a new processor on Tuesday for thin laptops. The company says it targets students and "
+           "remote workers who need longer battery life. Pricing starts later this year.")
+
+    def test_valid_reel_script(self):
+        out = ai_writer.validate_reel(dict(REEL_VALID), self.SRC, "Technology")
+        self.assertEqual(len(out["narration"]), 4)
+        self.assertEqual(out["broll_queries"], ["laptop typing", "technology circuit board"])
+        self.assertTrue(all(h.startswith("#") for h in out["hashtags"]))
+
+    def test_rejections(self):
+        def rejected(**kw):
+            with self.assertRaises(ContentError):
+                ai_writer.validate_reel(dict(REEL_VALID, **kw), self.SRC, "Technology")
+        rejected(narration=["Too short.", "Also short here too.", "Tiny sentence only."])               # too few words
+        rejected(narration=["word " * 30, "ok sentence number two is here now.", "and a third normal sentence goes here."])
+        rejected(narration=REEL_VALID["narration"][:2])                                                  # too few sentences
+        rejected(narration=REEL_VALID["narration"] + ["Visit https://example.com for more details today."])
+        rejected(narration=REEL_VALID["narration"][:3] + ["The chip is 40% faster than the old model overall."])
+        rejected(why_it_matters="Highlights key updates on this developing story for everyone.")
+
+    def test_string_narration_is_split_into_sentences(self):
+        out = ai_writer.validate_reel(dict(REEL_VALID, narration=" ".join(REEL_VALID["narration"])), self.SRC, "Technology")
+        self.assertEqual(len(out["narration"]), 4)
+
+    def test_fallback_reel_is_usable_without_ai(self):
+        fb = ai_writer.fallback_reel(make_cluster())
+        self.assertGreaterEqual(len(fb["narration"]), 1)
+        self.assertIsNone(fb["why_it_matters"])
+        self.assertNotIn("key updates", json.dumps(fb).lower())
+
+    def test_write_reel_uses_reel_prompt_and_separate_cache(self):
+        prompts = []
+
+        def fn(prompt):
+            prompts.append(prompt)
+            return json.dumps(REEL_VALID if "VOICEOVER" in prompt else VALID)
+        w = AIWriter(generate_json=fn, cache_path=self.tmp / "c.json", sleep=lambda s: None)
+        c = make_cluster()
+        _, m1 = w.write_reel(c)
+        _, m2 = w.write(c)           # carousel for the same story must not hit the reel cache
+        _, m3 = w.write_reel(c)
+        self.assertEqual((m1, m2, m3), ("ai", "ai", "cache"))
+        self.assertEqual(len(prompts), 2)
+
+    def test_caption_credits_footage(self):
+        content = ai_writer.validate_reel(dict(REEL_VALID), self.SRC, "Technology")
+        self.assertIn("Footage: Pexels", ai_writer.compose_caption(content, make_cluster(), "Pexels"))
+        self.assertNotIn("Footage:", ai_writer.compose_caption(content, make_cluster()))
+
+
+def make_test_clip(path: Path, seconds=6):
+    subprocess.run([video_renderer.find_ffmpeg(), "-y", "-loglevel", "error", "-f", "lavfi", "-i",
+                    f"testsrc2=s=720x1280:r=30:d={seconds}", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(path)], check=True)
+
+
+class TestReelRenderer(Base):
+    def test_chunking_rules(self):
+        words = [(w, i * 0.3, i * 0.3 + 0.25) for i, w in enumerate("This is a really long sentence, with commas and more words".split())]
+        chunks = reel_renderer.chunk_words(words)
+        self.assertTrue(all(len(c) <= 3 for c in chunks))
+        self.assertEqual([w for c in chunks for w in c], words)
+        self.assertTrue(any(c[-1][0].endswith(",") for c in chunks))  # breaks after punctuation
+
+    def test_caption_images_fit_the_safe_width(self):
+        for ws in (["Short", "words"], ["Extraordinarily", "unbelievable", "announcement"], ["Hi"]):
+            for im in reel_renderer._render_chunk(ws, (255, 200, 0)):
+                self.assertLessEqual(im.width, reel_renderer.CAPTION_MAX_W + 2 * 22 + 4)
+
+    def test_caption_chunks_timeline_is_monotonic(self):
+        words = tts.distribute_words("One two three four five six seven eight nine ten.", 6.0, start=0.35)
+        chunks = reel_renderer.build_caption_chunks(words, "News", 9.0)
+        self.assertTrue(all(c.end > c.start for c in chunks))
+        self.assertTrue(all(a.start < b.start for a, b in zip(chunks, chunks[1:])))
+        self.assertTrue(all(len(c.states) == len(c.word_starts) for c in chunks))
+
+    def test_full_reel_with_footage_and_voice(self):
+        clips = []
+        for i in range(2):
+            clips.append(self.tmp / f"c{i}.mp4")
+            make_test_clip(clips[-1])
+        content = ai_writer.validate_reel(dict(REEL_VALID), "", "Technology")
+        voice_wav = self.tmp / "voice.wav"
+        subprocess.run([video_renderer.find_ffmpeg(), "-y", "-loglevel", "error", "-f", "lavfi", "-i",
+                        "sine=frequency=200:duration=8", str(voice_wav)], check=True)
+        text = reel_studio.narration_text(content)
+        vo = tts.Voiceover(voice_wav, 8.0, tts.distribute_words(text, 8.0))
+
+        class Px:
+            enabled, name = True, "pexels"
+            def fetch_clips(self, q, out, wanted, **k): return clips
+        res = reel_studio.make_reel(content, make_cluster(), self.tmp / "r.mp4", providers=[Px()], tts=lambda t, d: vo)
+        info = video_renderer.probe(res.path)
+        self.assertEqual((res.voiced, res.footage), (True, "pexels"))
+        self.assertEqual((info["video"], info["audio"], info["size"]), ("h264", "aac", (1080, 1920)))
+        self.assertAlmostEqual(info["duration"], reel_renderer.LEAD + 8.0 + reel_renderer.OUTRO, delta=0.5)
+
+    def test_full_reel_without_voice_or_footage_still_moves(self):
+        """Offline / no keys: animated background + reading-speed captions, never a failure."""
+        content = ai_writer.validate_reel(dict(REEL_VALID), "", "Technology")
+        res = reel_studio.make_reel(content, make_cluster(), self.tmp / "r2.mp4",
+                                    providers=[], tts=lambda t, d: None)
+        info = video_renderer.probe(res.path)
+        self.assertEqual((res.voiced, res.footage), (False, "animated"))
+        self.assertEqual((info["video"], info["audio"], info["size"]), ("h264", "aac", (1080, 1920)))
+        self.assertGreaterEqual(info["duration"], 8.0)
+
+    def test_broken_footage_falls_back_to_animated_background(self):
+        bad = self.tmp / "bad.mp4"
+        bad.write_bytes(b"not a video" * 2000)
+        anim = self.tmp / "anim.mp4"
+        anim.write_bytes(b"x")
+
+        class Px:
+            enabled, name = True, "pexels"
+            def fetch_clips(self, q, out, wanted, **k): return [bad]
+
+        def fake_compose(bg, content, cluster, words, total, voice, music, out):
+            out.write_bytes(b"video")
+            return out
+        content = ai_writer.validate_reel(dict(REEL_VALID), "", "Technology")
+        with mock.patch.object(reel_studio, "prepare_animated_background", return_value=anim) as animated, \
+                mock.patch.object(reel_studio, "compose_reel", side_effect=fake_compose):
+            res = reel_studio.make_reel(content, make_cluster(), self.tmp / "r3.mp4", providers=[Px()], tts=lambda t, d: None)
+        self.assertEqual(res.footage, "animated")
+        animated.assert_called_once()  # the real ffmpeg rejected the corrupt clip -> animated background used
+
+    def test_narration_gets_follow_line_only_when_short(self):
+        c = {"narration": ["one two three four five."]}
+        self.assertTrue(reel_studio.narration_text(c).endswith("Follow for more updates."))
+        long = {"narration": ["word " * 20 + "end."] * 4}
+        self.assertNotIn("Follow for more", reel_studio.narration_text(long))
+
+
+class TestFootageSources(Base):
+    def pix_hit(self, i, tags="stadium, crowd, cheering", **vids):
+        return {"id": i, "duration": 12, "tags": tags, "pageURL": f"https://pixabay.com/videos/x-{i}/", "videos": vids}
+
+    def q(self, w, h, url="https://cdn.test/v.mp4"):
+        return {"url": url, "width": w, "height": h}
+
+    def test_pixabay_pick_skips_empty_large_and_4k(self):
+        hit = self.pix_hit(1, large=self.q(0, 0, ""), medium=self.q(1920, 1080, "m"), small=self.q(1280, 720, "s"),
+                           tiny=self.q(640, 360, "t"))
+        self.assertEqual(stock.pixabay_pick(hit)["url"], "m")
+        self.assertEqual(stock.pixabay_pick(self.pix_hit(2, large=self.q(3840, 2160, "4k"), medium=self.q(1280, 720, "m")))["url"], "m")
+        self.assertIsNone(stock.pixabay_pick(self.pix_hit(3, tiny=self.q(640, 360, "t"))))
+
+    def test_pixabay_fetch_sends_key_params_and_caches_24h(self):
+        hits = [self.pix_hit(1, medium=self.q(1920, 1080)), self.pix_hit(2, medium=self.q(1920, 1080))]
+        sess = FakeSession()
+
+        class S(FakeSession):
+            def get(s, url, headers=None, params=None, timeout=None, stream=False):
+                if "api/videos" in url:
+                    s.calls.append((url, headers, params))
+                    return Resp(200, {"hits": hits})
+                return super().get(url, headers, params, timeout, stream)
+        sess = S()
+        px = stock.PixabayClient("PIXKEY", session=sess)
+        clips = px.fetch_clips(["stadium crowd"], self.tmp / "pc", wanted=1)
+        self.assertEqual(len(clips), 1)
+        self.assertEqual(sess.calls[0][2]["key"], "PIXKEY")
+        n_api = len([c for c in sess.calls if "api/videos" in c[0]])
+        px.fetch_clips(["stadium crowd"], self.tmp / "pc2", wanted=1)           # same query again -> served from cache
+        self.assertEqual(len([c for c in sess.calls if "api/videos" in c[0]]), n_api)
+
+    def test_provider_selection(self):
+        with mock.patch.multiple(config, PEXELS_API_KEY="", PIXABAY_API_KEY="", STOCK_PROVIDER="auto"):
+            self.assertEqual(stock.configured_providers(), [])
+        with mock.patch.multiple(config, PEXELS_API_KEY="a", PIXABAY_API_KEY="b", STOCK_PROVIDER="auto"):
+            self.assertEqual([c.name for c in stock.configured_providers()], ["pexels", "pixabay"])
+        with mock.patch.multiple(config, PEXELS_API_KEY="a", PIXABAY_API_KEY="b", STOCK_PROVIDER="pixabay"):
+            self.assertEqual([c.name for c in stock.configured_providers()], ["pixabay"])
+        with mock.patch.multiple(config, PEXELS_API_KEY="a", PIXABAY_API_KEY="b", STOCK_PROVIDER="local"):
+            self.assertEqual(stock.configured_providers(), [])
+
+    def test_local_clips_prefer_category_folder(self):
+        root = self.tmp / "broll"
+        for sub, names in {"Sports": ["s1.mp4", "s2.mp4"], "technology": ["t1.mp4"]}.items():
+            (root / sub).mkdir(parents=True)
+            for n in names:
+                (root / sub / n).write_bytes(b"0")
+        (root / "loose.mp4").write_bytes(b"0")
+        self.assertEqual(sorted(p.name for p in stock.local_clips(root, 9, "Sports")), ["s1.mp4", "s2.mp4"])
+        self.assertEqual([p.name for p in stock.local_clips(root, 9, "Technology")], ["t1.mp4"])  # case-insensitive
+        self.assertEqual([p.name for p in stock.local_clips(root, 9, "News")], ["loose.mp4"])     # falls back to loose
+        only_sub = self.tmp / "b2"
+        (only_sub / "x").mkdir(parents=True)
+        (only_sub / "x" / "a.mov").write_bytes(b"0")
+        self.assertEqual([p.name for p in stock.local_clips(only_sub, 9, "News")], ["a.mov"])      # any sub-folder
+
+    def test_studio_falls_through_providers_then_local_then_animated(self):
+        calls = []
+
+        class Empty:
+            enabled, name = True, "pexels"
+            def fetch_clips(self, *a, **k): calls.append("pexels"); return []
+
+        class Broken:
+            enabled, name = True, "pixabay"
+            def fetch_clips(self, *a, **k): calls.append("pixabay"); raise RuntimeError("HTTP 500")
+        mine = self.tmp / "broll"
+        mine.mkdir()
+        (mine / "a.mp4").write_bytes(b"0")
+        anim = self.tmp / "anim.mp4"
+        anim.write_bytes(b"x")
+        prepared = []
+
+        def fake_footage(clips, total, tmp):
+            prepared.append(list(clips))
+            return anim
+
+        def fake_compose(bg, content, cluster, words, total, voice, music, out):
+            out.write_bytes(b"v")
+            return out
+        content = ai_writer.validate_reel(dict(REEL_VALID), "", "Technology")
+        with mock.patch.object(reel_studio, "prepare_footage_background", side_effect=fake_footage), \
+                mock.patch.object(reel_studio, "compose_reel", side_effect=fake_compose), \
+                mock.patch.object(config, "BROLL_DIR", str(mine)):
+            res = reel_studio.make_reel(content, make_cluster(), self.tmp / "o.mp4", providers=[Empty(), Broken()],
+                                        tts=lambda t, d: None)
+        self.assertEqual(calls, ["pexels", "pixabay"])
+        self.assertEqual((res.footage, res.credit), ("local", None))
+        self.assertEqual(prepared[0][0].name, "a.mp4")
+
+    def test_credit_names(self):
+        mk = lambda f: reel_studio.ReelResult(Path("x"), True, f, 9.0)  # noqa: E731
+        self.assertEqual((mk("pexels").credit, mk("pixabay").credit, mk("local").credit, mk("animated").credit),
+                         ("Pexels", "Pixabay", None, None))
+
+    def test_stock_provider_none_disables_local_clips_too(self):
+        mine = self.tmp / "broll"
+        mine.mkdir()
+        (mine / "a.mp4").write_bytes(b"0")
+        anim = self.tmp / "anim.mp4"
+        anim.write_bytes(b"x")
+
+        def fake_compose(bg, content, cluster, words, total, voice, music, out):
+            out.write_bytes(b"v")
+            return out
+        content = ai_writer.validate_reel(dict(REEL_VALID), "", "Technology")
+        with mock.patch.object(reel_studio, "prepare_animated_background", return_value=anim), \
+                mock.patch.object(reel_studio, "compose_reel", side_effect=fake_compose), \
+                mock.patch.multiple(config, BROLL_DIR=str(mine), STOCK_PROVIDER="none"):
+            res = reel_studio.make_reel(content, make_cluster(), self.tmp / "o2.mp4", providers=[], tts=lambda t, d: None)
+        self.assertEqual(res.footage, "animated")
+
+
+class TestRobustness(Base):
+    """Issues seen in a real run: placeholder keys, a rejected key retried 8x, Gemini voice without timings."""
+
+    def test_placeholder_keys_are_treated_as_missing(self):
+        for v in ("your_pexels_key", "YOUR_KEY_HERE", "xxxx", "<paste key>", "changeme", "paste_key_here", ""):
+            with mock.patch.dict(os.environ, {"PEXELS_API_KEY": v}):
+                self.assertEqual(config._key("PEXELS_API_KEY"), "", v)
+        with mock.patch.dict(os.environ, {"PEXELS_API_KEY": "5634abcDEF1234567890real"}):
+            self.assertEqual(config._key("PEXELS_API_KEY"), "5634abcDEF1234567890real")
+
+    def test_rejected_key_stops_after_first_request(self):
+        class S401(FakeSession):
+            pass
+        sess = S401(status=401)
+        px = stock.PexelsClient("BADKEY", session=sess)
+        self.assertEqual(px.fetch_clips(["a b", "c d", "e f", "g h"], self.tmp / "x", wanted=3), [])
+        self.assertEqual(len(sess.calls), 1)  # not 4: no point hammering a provider that refuses the key
+        with self.assertRaises(stock.StockAuthError):
+            px._items("a b")
+
+    def test_pixabay_invalid_key_is_an_auth_error(self):
+        class R(Resp):
+            text = "[ERROR 400] Invalid or missing API key"
+
+        class S:
+            def get(self, url, **kw):
+                return R(400)
+        px = stock.PixabayClient("bad", session=S(), cache_path=self.tmp / "c.json")
+        with self.assertRaises(stock.StockAuthError):
+            px.search("x")
+
+    def _speech_wav(self, parts):
+        """parts: [('s', seconds) silence | ('t', seconds) tone ...] -> wav path"""
+        ff = video_renderer.find_ffmpeg()
+        args, labels = [], ""
+        for i, (kind, sec) in enumerate(parts):
+            src = f"anullsrc=r=24000:cl=mono:d={sec}" if kind == "s" else f"sine=f={300 + 100 * i}:r=24000:d={sec}"
+            args += ["-f", "lavfi", "-i", src]
+            labels += f"[{i}]"
+        out = self.tmp / "speech.wav"
+        subprocess.run([ff, "-y", "-loglevel", "error", *args, "-filter_complex",
+                        f"{labels}concat=n={len(parts)}:v=0:a=1", "-c:a", "pcm_s16le", str(out)], check=True)
+        return out
+
+    def test_alignment_uses_real_pauses_between_sentences(self):
+        # silence .4 | speech 1.0 | pause .6 | speech 1.5 | pause .7 | speech 1.0   (total 5.2 s)
+        wav = self._speech_wav([("s", 0.4), ("t", 1.0), ("s", 0.6), ("t", 1.5), ("s", 0.7), ("t", 1.0)])
+        text = "First sentence here. Second one is a bit longer. Third."
+        words = tts.align_words(text, wav, 5.2)
+        self.assertEqual(len(words), len(text.split()))
+        self.assertAlmostEqual(words[0][1], 0.4, delta=0.2)                  # leading silence skipped
+        self.assertAlmostEqual(words[3][1], 2.0, delta=0.2)                  # "Second" starts after the first pause
+        self.assertAlmostEqual(words[-1][1], 4.2, delta=0.2)                 # "Third." after the second pause
+        self.assertAlmostEqual(words[-1][2], 5.2, delta=0.2)
+        self.assertTrue(all(a[2] <= b[1] + 1e-6 for a, b in zip(words, words[1:])))
+
+    def test_alignment_never_raises(self):
+        words = tts.align_words("One two three. Four five.", self.tmp / "missing.wav", 4.0)
+        self.assertEqual(len(words), 5)
+        self.assertAlmostEqual(words[-1][2], 4.0, places=2)
+
+    def test_alignment_with_too_few_pauses_still_trims_edges(self):
+        wav = self._speech_wav([("s", 0.8), ("t", 3.0), ("s", 0.5)])  # one continuous speech burst
+        words = tts.align_words("Alpha beta. Gamma delta.", wav, 4.3)
+        self.assertAlmostEqual(words[0][1], 0.8, delta=0.2)
+        self.assertAlmostEqual(words[-1][2], 3.8, delta=0.2)
+
+
+class TestFootageRelevance(Base):
+    """Real failure: an election/tribunal story got hands, autumn trees, vinyl records and a slackliner."""
+
+    def hit(self, i, tags, slug="clip"):
+        return {"id": i, "duration": 12, "tags": tags, "pageURL": f"https://pixabay.com/videos/{slug}-{i}/",
+                "videos": {"medium": {"url": f"https://cdn.test/{i}.mp4", "width": 1920, "height": 1080, "size": 5_000_000}}}
+
+    def client(self, hits):
+        class S(FakeSession):
+            def get(s, url, headers=None, params=None, timeout=None, stream=False):
+                if "api/videos" in url:
+                    s.calls.append((url, headers, params))
+                    return Resp(200, {"hits": hits})
+                return super().get(url, headers, params, timeout, stream)
+        return stock.PixabayClient("K", session=S(), cache_path=self.tmp / "sc.json")
+
+    def test_stemmer_links_word_forms(self):
+        self.assertEqual(stock.kw("voting"), stock.kw("voters"))
+        self.assertEqual(stock.kw("voting"), stock.kw("vote"))
+        self.assertNotEqual(stock.kw("voting"), stock.kw("cricket"))
+
+    def test_unrelated_clips_are_rejected_and_the_relevant_one_chosen(self):
+        hits = [self.hit(1, "hands, fingers, gesture, ok sign"), self.hit(2, "autumn, trees, forest, park"),
+                self.hit(3, "vinyl, records, music store, shopping"), self.hit(4, "voting, election, ballot, democracy"),
+                self.hit(5, "slackline, balance, sport, woman")]
+        px = self.client(hits)
+        clips = px.fetch_clips(["voting ballot box"], self.tmp / "o", wanted=1)
+        self.assertEqual(len(clips), 1)
+        self.assertEqual(px.chosen[0]["query"], "voting ballot box")
+        self.assertIn("voting", px.chosen[0]["tags"])
+
+    def test_nothing_relevant_means_no_clip_not_a_random_one(self):
+        hits = [self.hit(1, "hands, fingers"), self.hit(2, "autumn, trees"), self.hit(3, "slackline, balance")]
+        px = self.client(hits)
+        self.assertEqual(px.fetch_clips(["voting ballot box", "courtroom gavel"], self.tmp / "o2", wanted=2), [])
+
+    def test_best_match_beats_weaker_match(self):
+        hits = [self.hit(1, "crowd, people"), self.hit(2, "stadium, crowd, cheering, fans")]
+        px = self.client(hits)
+        px.fetch_clips(["stadium crowd cheering"], self.tmp / "o3", wanted=1)
+        self.assertIn("stadium", px.chosen[0]["tags"])
+
+    def test_pexels_uses_the_url_slug_as_searchable_text(self):
+        sess = FakeSession([pexels_video(1, [mp4_file(1080, 1920)], slug="people-voting-at-polling-station"),
+                            pexels_video(2, [mp4_file(1080, 1920)], slug="woman-on-a-slackline")])
+        px = stock.PexelsClient("K", session=sess)
+        px.fetch_clips(["voting queue"], self.tmp / "p", wanted=1)
+        self.assertIn("voting", px.chosen[0]["tags"])
+
+    def test_topic_queries_use_concrete_scenes(self):
+        q = stock.topic_queries("19,000 West Bengal voters to miss bypolls as appeals remain pending in tribunals")
+        self.assertEqual(q[0], "voting ballot box")
+        self.assertIn("courtroom gavel", q)                              # second matching topic: tribunals
+        self.assertIn("cricket match stadium", stock.topic_queries("Kohli hits a century as India win the Test"))
+        self.assertIn("circuit board", stock.topic_queries("New chip launched for laptops"))
+        self.assertEqual(stock.topic_queries("Local council meets on Tuesday"), [])
+
+    def test_queries_for_orders_specific_then_ai_then_category(self):
+        q = stock.queries_for("News", ["functional issues", "legal documents"], "voters bypolls tribunal")
+        self.assertEqual(q[0], "voting ballot box")
+        self.assertNotIn("functional", " ".join(q))                      # abstract words are never searched
+        self.assertLess(q.index("legal documents"), q.index("city street traffic"))
+        self.assertLessEqual(len(q), 10)
+
+    def test_clean_query_drops_abstract_words(self):
+        self.assertEqual(stock.clean_query("functional issues pending appeals"), "")
+        self.assertEqual(stock.clean_query("Voting Ballot issues!"), "voting ballot")
+
+    def test_pixabay_pick_skips_huge_files(self):
+        hit = {"videos": {"large": {"url": "big", "width": 1920, "height": 1080, "size": 90_000_000},
+                          "medium": {"url": "ok", "width": 1280, "height": 720, "size": 8_000_000}}}
+        self.assertEqual(stock.pixabay_pick(hit)["url"], "ok")
+
+    def test_local_clip_names_matching_the_story_come_first(self):
+        root = self.tmp / "broll2"
+        (root / "News").mkdir(parents=True)
+        for name in ("random_clip.mp4", "city_night.mp4"):
+            (root / "News" / name).write_bytes(b"0")
+        (root / "election_voting_queue.mp4").write_bytes(b"0")
+        got = stock.local_clips(root, 3, "News", queries=["voting ballot box", "people voting queue"])
+        self.assertEqual(got[0].name, "election_voting_queue.mp4")
+
+    def test_studio_searches_with_story_specific_terms(self):
+        seen = []
+
+        class Spy:
+            enabled, name, chosen = True, "pixabay", []
+            def fetch_clips(self, queries, out, wanted, **k):
+                seen.append(list(queries))
+                return []
+        c = make_cluster("News")
+        c["lead"] = dict(c["lead"], title="19,000 voters to miss bypolls as appeals pending in tribunals",
+                         summary="Voters in West Bengal remain unable to vote.")
+        anim = self.tmp / "a.mp4"
+        anim.write_bytes(b"x")
+
+        def fake_compose(bg, content, cluster, words, total, voice, music, out):
+            out.write_bytes(b"v")
+            return out
+        content = ai_writer.validate_reel(dict(REEL_VALID, broll_queries=["functional issues"]), "", "News")
+        with mock.patch.object(reel_studio, "prepare_animated_background", return_value=anim), \
+                mock.patch.object(reel_studio, "compose_reel", side_effect=fake_compose):
+            reel_studio.make_reel(content, c, self.tmp / "o.mp4", providers=[Spy()], tts=lambda t, d: None)
+        self.assertEqual(seen[0][0], "voting ballot box")
+        self.assertNotIn("functional", " ".join(seen[0]))
+
+
+class TestDynamicReelPipeline(PipelineFixture):
+    def maker(self, footage="pexels", fail=False):
+        calls = []
+
+        def make(content, cand, out_path, music_path=None):
+            calls.append(content)
+            if fail:
+                raise video_renderer.VideoError("render exploded")
+            subprocess.run([video_renderer.find_ffmpeg(), "-y", "-loglevel", "error", "-f", "lavfi", "-i",
+                            "testsrc2=s=320x568:r=10:d=1", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(out_path)], check=True)
+            return reel_studio.ReelResult(Path(out_path), True, footage, 8.0)
+        make.calls = calls
+        return make
+
+    def run_dynamic(self, maker):
+        ai = lambda p: json.dumps(REEL_VALID if "VOICEOVER" in p else VALID)  # noqa: E731
+        p = self.build(ai=ai)
+        p.reel_maker = maker
+        with mock.patch.multiple(config, CONTENT_FORMATS={"reel": 1}, REEL_STYLE="dynamic"):
+            return p, p.run_cycle()
+
+    def test_dynamic_reel_published_with_narration_content_and_credit(self):
+        m = self.maker("pexels")
+        p, res = self.run_dynamic(m)
+        self.assertEqual((res["status"], res["format"]), ("published", "reel"), res)
+        self.assertIn("narration", m.calls[0])                       # the voiced script, not info cards
+        create = next(c for c in self.ig_session.calls if c[0] == "POST" and c[2].get("media_type") == "REELS")
+        self.assertIn("Footage: Pexels", create[2]["caption"])
+        self.assertEqual(p.load_history()[0]["reel"], "voice=True footage=pexels")
+
+    def test_no_pexels_credit_when_footage_not_from_pexels(self):
+        p, res = self.run_dynamic(self.maker("animated"))
+        create = next(c for c in self.ig_session.calls if c[0] == "POST" and c[2].get("media_type") == "REELS")
+        self.assertNotIn("Footage:", create[2]["caption"])
+
+    def test_reel_failure_falls_back_to_carousel(self):
+        p, res = self.run_dynamic(self.maker(fail=True))
+        self.assertEqual((res["status"], res["format"]), ("published", "carousel"), res)
+        self.assertEqual(self.ig_session.published, 1)
+
+    def test_legacy_cards_style_still_available(self):
+        p = self.build()
+        with mock.patch.multiple(config, CONTENT_FORMATS={"reel": 1}, REEL_STYLE="cards"):
+            res = p.run_cycle()
+        self.assertEqual((res["status"], res["format"]), ("published", "reel"), res)
+
+
+class TestOwnClipPosting(PipelineFixture):
+    """Publish a clip the operator has rights to: reformat, credit, caption, publish. Never downloads anything."""
+
+    def make_video(self, name, w, h, seconds=5, audio=True):
+        ff = video_renderer.find_ffmpeg()
+        out = self.tmp / name
+        cmd = [ff, "-y", "-loglevel", "error", "-f", "lavfi", "-i", f"testsrc2=s={w}x{h}:r=25:d={seconds}"]
+        if audio:
+            cmd += ["-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}", "-c:a", "aac"]
+        cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", str(out)]
+        subprocess.run(cmd, check=True)
+        return out
+
+    def cluster(self):
+        return clip_post.synthetic_cluster("India win Asian Games cricket gold medals", "", "BCCI / Star Sports", "Sports")
+
+    def test_landscape_clip_becomes_9x16_and_keeps_original_audio(self):
+        src = self.make_video("land.mp4", 1280, 720, 5, audio=True)
+        out = clip_post.prepare_clip(src, self.tmp / "o.mp4", cluster=self.cluster(), hook="India win gold", credit="BCCI", fps=10)
+        info = video_renderer.probe(out)
+        self.assertEqual((info["video"], info["audio"], info["size"]), ("h264", "aac", (1080, 1920)))
+        self.assertAlmostEqual(info["duration"], 5.0, delta=0.4)
+
+    def test_silent_clip_gets_an_audio_track_and_long_clip_is_trimmed(self):
+        src = self.make_video("silent.mp4", 720, 1280, 6, audio=False)
+        out = clip_post.prepare_clip(src, self.tmp / "o2.mp4", cluster=self.cluster(), hook=None, credit="X Org",
+                                     max_seconds=4, fps=10)
+        info = video_renderer.probe(out)
+        self.assertEqual(info["audio"], "aac")
+        self.assertAlmostEqual(info["duration"], 4.0, delta=0.4)
+
+    def test_hook_headline_only_shows_at_the_start(self):
+        src = self.make_video("hook.mp4", 1280, 720, 6, audio=True)
+        out = clip_post.prepare_clip(src, self.tmp / "o3.mp4", cluster=self.cluster(), hook="India win Asian Games gold",
+                                     credit="BCCI", fps=10)
+        ff = video_renderer.find_ffmpeg()
+        frames = {}
+        for t in ("1.0", "5.0"):
+            png = self.tmp / f"f{t}.png"
+            subprocess.run([ff, "-y", "-loglevel", "error", "-ss", t, "-i", str(out), "-frames:v", "1", str(png)], check=True)
+            frames[t] = Image.open(png).convert("RGB").crop((96, 420, 900, 520))
+        # white headline pixels exist at t=1s, none at t=5s
+        white = lambda im: im.convert("L").point(lambda v: 255 if v > 245 else 0).histogram()[255]  # noqa: E731
+        self.assertGreater(white(frames["1.0"]), 200)
+        self.assertLess(white(frames["5.0"]), 50)
+
+    def test_bad_inputs_have_clear_errors(self):
+        with self.assertRaises(clip_post.ClipError):
+            clip_post.prepare_clip(self.tmp / "nope.mp4", self.tmp / "x.mp4", cluster=self.cluster(), hook=None, credit="c")
+        junk = self.tmp / "junk.mp4"
+        junk.write_bytes(b"not a video" * 1000)
+        with self.assertRaises(clip_post.ClipError):
+            clip_post.prepare_clip(junk, self.tmp / "x.mp4", cluster=self.cluster(), hook=None, credit="c")
+        tiny = self.make_video("tiny.mp4", 320, 568, 2)
+        with self.assertRaises(clip_post.ClipError):
+            clip_post.prepare_clip(tiny, self.tmp / "x.mp4", cluster=self.cluster(), hook=None, credit="c")
+
+    def test_news_matching_grounds_the_caption(self):
+        arts = [make_article(1, "Sports", "BBC Sport", now=self.NOW), make_article(2, "News", "BBC News", now=self.NOW)]
+        arts[0]["title"] = "India women and men win Asian Games cricket gold medals"
+        arts[0]["summary"] = "India's cricket teams won gold at the Asian Games in a double celebration for the squads."
+        got = clip_post.match_news_cluster("India cricket teams win Asian Games gold", arts)
+        self.assertIsNotNone(got)
+        self.assertIn("Asian Games", got["lead"]["title"])
+        self.assertIsNone(clip_post.match_news_cluster("Quarterly inflation numbers released", arts))
+
+    def test_publishes_reel_with_credit_and_records_history(self):
+        arts = [make_article(1, "Sports", "BBC Sport", now=self.NOW)]
+        arts[0]["title"] = "India women and men win Asian Games cricket gold medals"
+        arts[0]["summary"] = "India's cricket teams won gold at the Asian Games in a double celebration for the squads."
+        p = self.build(articles=arts)
+        src = self.make_video("c.mp4", 1280, 720, 5)
+        with mock.patch.object(config, "VIDEO_FPS", 10):
+            res = clip_post.post_clip(p, video=src, topic="India cricket teams win Asian Games gold",
+                                      credit="BCCI / Star Sports")
+        self.assertEqual((res["status"], res["format"]), ("published", "reel"), res)
+        create = next(c for c in self.ig_session.calls if c[0] == "POST" and c[2].get("media_type") == "REELS")
+        self.assertIn("Footage: BCCI / Star Sports", create[2]["caption"])
+        self.assertIn("BBC Sport", create[2]["caption"])           # real reporting credited too
+        rec = p.load_history()[0]
+        self.assertIn("own clip", rec["reel"])
+        self.assertTrue(rec["articles"])                              # scheduled posts will not repeat this story
+        left = list((self.tmp / "public").glob("*")) if (self.tmp / "public").exists() else []
+        self.assertEqual(left, [])
+
+    def test_dry_run_and_validation(self):
+        p = self.build(articles=[])
+        src = self.make_video("d.mp4", 720, 1280, 5)
+
+        def fake_prepare(video, out, **kw):
+            Path(out).write_bytes(b"0" * 20_000)
+            return Path(out)
+        with mock.patch.object(clip_post, "prepare_clip", side_effect=fake_prepare):
+            res = clip_post.post_clip(p, video=src, topic="India cricket teams win Asian Games gold",
+                                      credit="BCCI", dry=True, from_news=False, category="Sports")
+        self.assertEqual(res["status"], "dry_run")
+        self.assertTrue(Path(res["files"][0]).exists())
+        self.assertEqual(self.ig_session.published, 0)
+        with self.assertRaises(clip_post.ClipError):
+            clip_post.post_clip(p, video=src, topic="short", credit="BCCI")
+        with self.assertRaises(clip_post.ClipError):
+            clip_post.post_clip(p, video=src, topic="India cricket teams win Asian Games gold", credit="  ")
+
+    def test_cli_refuses_without_rights_confirmation(self):
+        import main
+        argv = ["post-clip", "--video", str(self.tmp / "x.mp4"), "--topic", "India win Asian Games gold", "--credit", "BCCI"]
+        self.assertEqual(main.main(argv), 2)
 
 
 # ------------------------------------------------------------------ regression guards for the old Telegram project's issues

@@ -17,6 +17,15 @@ def _s(name: str, default: str = "") -> str:
     return (os.getenv(name) or default).strip().strip('"').strip("'")
 
 
+def _key(name: str) -> str:
+    """API key that ignores obvious placeholders (your_key, xxx, <paste>, changeme) left in .env."""
+    v = _s(name)
+    low = v.lower()
+    if low.startswith(("your", "xxx", "<", "changeme", "paste", "insert")) or "your_" in low or "_here" in low:
+        return ""
+    return v
+
+
 def _i(name: str, default: int) -> int:
     try:
         return int(_s(name, str(default)))
@@ -62,7 +71,7 @@ IG_API_VERSION = _s("IG_API_VERSION", "v26.0")
 IG_DAILY_API_LIMIT = _i("IG_DAILY_API_LIMIT", 50)  # conservative (carousel limit)
 
 # --- AI ----------------------------------------------------------------
-GEMINI_API_KEY = _s("GEMINI_API_KEY")
+GEMINI_API_KEY = _key("GEMINI_API_KEY")
 GEMINI_MODEL = _s("GEMINI_MODEL", "gemini-flash-latest")  # alias -> current Flash; auto-discovery if missing
 AI_MAX_ATTEMPTS = _i("AI_MAX_ATTEMPTS", 2)
 AI_CACHE_TTL_HOURS = _i("AI_CACHE_TTL_HOURS", 24)
@@ -91,6 +100,25 @@ MAX_POSTS_PER_DAY = _i("MAX_POSTS_PER_DAY", 6)
 MIN_POST_INTERVAL_MINUTES = _i("MIN_POST_INTERVAL_MINUTES", 60)
 CATEGORY_WEIGHTS = parse_weights(_s("CATEGORY_WEIGHTS", "News:3,Technology:3,Sports:2,Entertainment:2"))
 
+# --- Formats (carousel = image slides, reel = vertical video) -----------
+CONTENT_FORMATS = parse_weights(_s("CONTENT_FORMATS", "carousel:1,reel:1"))
+VIDEO_SECONDS_PER_SLIDE = _f("VIDEO_SECONDS_PER_SLIDE", 4.0)
+VIDEO_FPS = _i("VIDEO_FPS", 30)
+MUSIC_PATH = _s("MUSIC_PATH")  # optional ROYALTY-FREE audio file
+REEL_SHARE_TO_FEED = _b("REEL_SHARE_TO_FEED", True)
+REEL_STYLE = _s("REEL_STYLE", "dynamic").lower()          # dynamic = footage + voiceover + captions, cards = old slideshow
+STOCK_PROVIDER = _s("STOCK_PROVIDER", "auto").lower()      # auto | pexels | pixabay | local | none
+PEXELS_API_KEY = _key("PEXELS_API_KEY")                      # https://www.pexels.com/api/ (new keys may be paused)
+PIXABAY_API_KEY = _key("PIXABAY_API_KEY")                    # free: https://pixabay.com/api/docs/
+BROLL_DIR = _s("BROLL_DIR")                                # optional folder of your OWN vertical .mp4 clips
+TTS_PROVIDER = _s("TTS_PROVIDER", "auto").lower()          # auto | edge | gemini | none
+TTS_VOICE = _s("TTS_VOICE", "en-IN-NeerjaNeural")
+TTS_RATE = _s("TTS_RATE", "+6%")
+GEMINI_TTS_VOICE = _s("GEMINI_TTS_VOICE", "Kore")        # used when the Gemini voice is the one speaking
+MUSIC_VOLUME = _f("MUSIC_VOLUME", 0.12)                    # background music level under the voice (0..1)
+FOOTAGE_CREDIT = _b("FOOTAGE_CREDIT", True)                # add "Footage: Pexels" to captions when stock is used
+IG_VIDEO_POLL_TIMEOUT = _i("IG_VIDEO_POLL_TIMEOUT", 600)
+
 # --- Collection / ranking ---------------------------------------------
 MAX_NEWS_AGE_HOURS = _i("MAX_NEWS_AGE_HOURS", 24)
 MIN_STORY_SCORE = _f("MIN_STORY_SCORE", 35.0)
@@ -115,7 +143,7 @@ BREAKER_PAUSE_HOURS = _i("BREAKER_PAUSE_HOURS", 3)
 
 
 def secrets_to_mask() -> list[str]:
-    vals = [IG_ACCESS_TOKEN, GEMINI_API_KEY, CLOUDINARY_API_SECRET, CLOUDINARY_API_KEY, GITHUB_TOKEN]
+    vals = [IG_ACCESS_TOKEN, GEMINI_API_KEY, CLOUDINARY_API_SECRET, CLOUDINARY_API_KEY, GITHUB_TOKEN, PEXELS_API_KEY, PIXABAY_API_KEY]
     return [v for v in vals if v and len(v) >= 6]
 
 
@@ -145,6 +173,14 @@ def validate(mode: str = "publish") -> list[str]:
             problems.append(f"MEDIA_HOST '{MEDIA_HOST}' is invalid (cloudinary|github|local)")
     if not CATEGORY_WEIGHTS:
         problems.append("CATEGORY_WEIGHTS is empty/invalid")
+    if not CONTENT_FORMATS or set(CONTENT_FORMATS) - {"carousel", "reel"}:
+        problems.append("CONTENT_FORMATS must use only carousel and/or reel, e.g. carousel:1,reel:1")
+    if REEL_STYLE not in {"dynamic", "cards"}:
+        problems.append("REEL_STYLE must be dynamic or cards")
+    if STOCK_PROVIDER not in {"auto", "pexels", "pixabay", "local", "none"}:
+        problems.append("STOCK_PROVIDER must be auto, pexels, pixabay, local or none")
+    if TTS_PROVIDER not in {"auto", "edge", "gemini", "none"}:
+        problems.append("TTS_PROVIDER must be auto, edge, gemini or none")
     if not POST_TIMES:
         problems.append("POST_TIMES is empty")
     for t in POST_TIMES:
