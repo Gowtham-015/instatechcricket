@@ -12,6 +12,7 @@ of the actual event.
 from __future__ import annotations
 
 import logging
+import math
 import random
 import re
 import time
@@ -42,6 +43,10 @@ GENERIC_WORDS = {"video", "videos", "footage", "people", "person", "scene", "bac
 ABSTRACT_WORDS = {"issue", "issues", "appeal", "appeals", "pending", "functional", "vacant", "policy", "crisis",
                   "concept", "idea", "trend", "trends", "update", "updates", "news", "story", "debate", "tension",
                   "development", "situation", "impact", "reason", "reasons", "result", "results", "plan", "plans"}
+# Tags that mean the clip is about something else entirely (animals, insects, close-ups of shoes) unless the search asked for it.
+OFF_TOPIC_TAGS = {"frog", "frogs", "insect", "insects", "butterfly", "bird", "birds", "fish", "flower", "flowers", "animal",
+                  "animals", "wildlife", "pet", "pets", "puppy", "kitten", "toy", "toys", "cartoon", "feet", "shoes", "shoe",
+                  "boots", "sandals", "legs", "baby"}
 _SUFFIXES = ("ions", "ion", "ing", "ers", "er", "ed", "es", "al", "ly", "s", "e")
 
 
@@ -86,7 +91,9 @@ TOPIC_VISUALS: list[tuple[set[str], list[str]]] = [
      ["office meeting", "skyscrapers city", "business handshake", "startup office"]),
     ({"police", "arrest", "arrested", "crime", "investigation", "cbi", "raid", "probe"},
      ["police car lights", "police officers", "investigation documents"]),
-    ({"flood", "floods", "cyclone", "rain", "rains", "monsoon", "earthquake", "landslide", "heatwave", "storm"},
+    ({"earthquake", "earthquakes", "quake", "tremor", "tremors", "magnitude", "tsunami", "aftershock", "seismic"},
+     ["collapsed building rubble", "rescue workers rubble", "emergency rescue team", "ocean waves crashing"]),
+    ({"flood", "floods", "cyclone", "rain", "rains", "monsoon", "landslide", "heatwave", "storm"},
      ["flood water street", "heavy rain city", "storm clouds", "rescue team"]),
     ({"hospital", "doctor", "doctors", "vaccine", "disease", "virus", "outbreak", "health", "patients", "medical"},
      ["hospital corridor", "doctor stethoscope", "medical laboratory", "vaccine syringe"]),
@@ -210,8 +217,11 @@ class _StockClient:
             except Exception as e:  # noqa: BLE001
                 log.warning("%s search '%s' failed: %s", self.name, q, mask_secrets(str(e))[:100])
                 continue
+            need = max(1, math.ceil(0.6 * len(terms)))   # most of the search words must appear in the clip's tags
+            asked = set(re.findall(r"[a-z]+", " ".join(queries).lower()))
+            items = [i for i in items if not (set(re.findall(r"[a-z]+", i.get("text", "").lower())) & (OFF_TOPIC_TAGS - asked))]
             scored = [(overlap(terms, i.get("text", "")), i) for i in items]
-            scored = [x for x in scored if x[0] >= 1]
+            scored = [x for x in scored if x[0] >= need]
             if not scored:
                 log.info("%s: nothing relevant for '%s' (skipped %d unrelated clips)", self.name, q, len(items))
                 continue

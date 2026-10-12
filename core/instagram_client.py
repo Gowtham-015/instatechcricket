@@ -203,8 +203,8 @@ class InstagramClient:
                     return found
             raise
 
-    def publish_images(self, image_urls: list[str], caption: str) -> PublishResult:
-        container = (self.create_single(image_urls[0], caption) if len(image_urls) == 1
+    def publish_images(self, image_urls: list[str], caption: str, alt_text: str | None = None) -> PublishResult:
+        container = (self.create_single(image_urls[0], caption, alt_text) if len(image_urls) == 1
                      else self.create_carousel(image_urls, caption))
         return self._publish_with_recovery(container, caption)
 

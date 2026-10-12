@@ -116,10 +116,13 @@ def reading_speed_duration(text: str, wps: float = 2.7) -> float:
 
 
 # ---------------------------------------------------------------- providers
-async def _edge_collect(text: str, voice: str, rate: str):
+async def _edge_collect(text: str, voice: str, rate: str, pitch: str = "+0Hz"):
     import edge_tts
     audio, bounds = bytearray(), []
-    com = edge_tts.Communicate(text, voice, rate=rate, boundary="WordBoundary")
+    try:
+        com = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch, boundary="WordBoundary")
+    except TypeError:   # very old edge-tts without pitch support
+        com = edge_tts.Communicate(text, voice, rate=rate, boundary="WordBoundary")
     async for chunk in com.stream():
         kind = chunk.get("type")
         if kind == "audio":
@@ -129,8 +132,9 @@ async def _edge_collect(text: str, voice: str, rate: str):
     return bytes(audio), bounds
 
 
-def _edge(text: str, out_dir: Path) -> Voiceover | None:
-    audio, bounds = asyncio.run(asyncio.wait_for(_edge_collect(text, config.TTS_VOICE, config.TTS_RATE), 90))
+def _edge(text: str, out_dir: Path, voice: str = "", rate: str = "", pitch: str = "") -> Voiceover | None:
+    audio, bounds = asyncio.run(asyncio.wait_for(
+        _edge_collect(text, voice or config.TTS_VOICE, rate or config.TTS_RATE, pitch or "+0Hz"), 90))
     if not audio:
         return None
     path = out_dir / "voice.mp3"
@@ -146,7 +150,7 @@ def _edge(text: str, out_dir: Path) -> Voiceover | None:
     return Voiceover(path, float(duration), words, "edge")
 
 
-def _gemini(text: str, out_dir: Path) -> Voiceover | None:
+def _gemini(text: str, out_dir: Path, **_ignored) -> Voiceover | None:
     if not config.GEMINI_API_KEY:
         return None
     from google import genai
@@ -175,7 +179,8 @@ def _gemini(text: str, out_dir: Path) -> Voiceover | None:
     return Voiceover(path, duration, align_words(text, path, duration), "gemini")
 
 
-def synthesize(text: str, out_dir: Path, provider: str | None = None) -> Voiceover | None:
+def synthesize(text: str, out_dir: Path, provider: str | None = None, voice: str = "", rate: str = "",
+               pitch: str = "") -> Voiceover | None:
     provider = (provider or config.TTS_PROVIDER).lower()
     if provider == "none" or not text.strip():
         return None
@@ -184,7 +189,7 @@ def synthesize(text: str, out_dir: Path, provider: str | None = None) -> Voiceov
     out_dir.mkdir(parents=True, exist_ok=True)
     for name, fn in chain:
         try:
-            vo = fn(text, out_dir)
+            vo = fn(text, out_dir, voice=voice, rate=rate, pitch=pitch)
             if vo and vo.duration > 1.0:
                 log.info("Voiceover by %s: %.1fs, %d words", name, vo.duration, len(vo.words))
                 return vo

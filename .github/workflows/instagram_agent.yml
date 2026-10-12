@@ -10,27 +10,27 @@ on:
         type: boolean
         default: false
       format:
-        description: "Format for a manual run"
+        description: "Format for a manual run (auto = the editorial engine decides from the story and the media found)"
         type: choice
-        options: [auto, carousel, reel]
+        options: [auto, photo, carousel, reel, video, card]
         default: auto
       dry_run:
-        description: "Dry run (build the post, do not publish)"
+        description: "Dry run: build the post and the editorial decision report, publish NOTHING (files are attached to the run)"
         type: boolean
         default: false
 
-# Never run two agents at once (prevents double posts + state conflicts)
+# Never run two agents at once (prevents double posts + state conflicts). A run that may be mid-publish is never cancelled.
 concurrency:
   group: instagram-agent
   cancel-in-progress: false
 
 permissions:
-  contents: write   # commit small state files + (optional) media branch
+  contents: write   # commit the small state files below (+ the optional media branch)
 
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -46,6 +46,7 @@ jobs:
 
       - name: Run one cycle
         env:
+          # --- secrets (Settings > Secrets and variables > Actions > Secrets) ---
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -55,30 +56,68 @@ jobs:
           ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
-          TTS_VOICE: ${{ vars.TTS_VOICE || 'en-IN-NeerjaNeural' }}
-          REEL_STYLE: ${{ vars.REEL_STYLE || 'dynamic' }}
+          OPENVERSE_CLIENT_ID: ${{ secrets.OPENVERSE_CLIENT_ID }}
+          OPENVERSE_CLIENT_SECRET: ${{ secrets.OPENVERSE_CLIENT_SECRET }}
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          # --- settings (Settings > Secrets and variables > Actions > Variables); defaults apply when unset ---
+          IG_API_HOST: ${{ vars.IG_API_HOST || 'https://graph.facebook.com' }}
+          FB_MODE: ${{ vars.FB_MODE || 'crosspost' }}
           MEDIA_HOST: ${{ vars.MEDIA_HOST || 'cloudinary' }}
           BRAND_NAME: ${{ vars.BRAND_NAME || 'Daily Pulse' }}
           ACCOUNT_HANDLE: ${{ vars.ACCOUNT_HANDLE || '@yourhandle' }}
           BRAND_HASHTAGS: ${{ vars.BRAND_HASHTAGS }}
           POST_TIMES: ${{ vars.POST_TIMES || '09:00,13:00,18:00,21:00' }}
-          CATEGORY_WEIGHTS: ${{ vars.CATEGORY_WEIGHTS || 'News:3,Technology:3,Sports:2,Entertainment:2' }}
-          CONTENT_FORMATS: ${{ vars.CONTENT_FORMATS || 'carousel:1,reel:1' }}
+          MAX_POSTS_PER_DAY: ${{ vars.MAX_POSTS_PER_DAY || '6' }}
+          MIN_POST_INTERVAL_MINUTES: ${{ vars.MIN_POST_INTERVAL_MINUTES || '60' }}
+          CATEGORY_WEIGHTS: ${{ vars.CATEGORY_WEIGHTS || 'News:3,Technology:3,Sports:2,Entertainment:2,Business:2,Science:1' }}
+          CONTENT_FORMATS: ${{ vars.CONTENT_FORMATS || 'carousel:1,reel:1' }}   # only used when FORMAT_POLICY=legacy
+          FORMAT_POLICY: ${{ vars.FORMAT_POLICY || 'editorial' }}
+          MEDIA_SOURCE_ORDER: ${{ vars.MEDIA_SOURCE_ORDER || 'official,local,commons,openverse' }}
+          MEDIA_MIN_CONFIDENCE: ${{ vars.MEDIA_MIN_CONFIDENCE || '0.6' }}
+          ALLOW_FILE_PHOTOS: ${{ vars.ALLOW_FILE_PHOTOS || 'true' }}
+          OFFICIAL_MEDIA_DOMAINS: ${{ vars.OFFICIAL_MEDIA_DOMAINS || 'nasa.gov,images.nasa.gov' }}
+          EDITORIAL_MIN_CONFIDENCE: ${{ vars.EDITORIAL_MIN_CONFIDENCE || '0.35' }}
+          MIN_CORROBORATION_SENSITIVE: ${{ vars.MIN_CORROBORATION_SENSITIVE || '2' }}
+          REEL_STYLE: ${{ vars.REEL_STYLE || 'dynamic' }}
+          REEL_VOICEOVER: ${{ vars.REEL_VOICEOVER || 'auto' }}
+          REEL_NARRATION_MIN: ${{ vars.REEL_NARRATION_MIN || '0.6' }}
+          TTS_VOICE: ${{ vars.TTS_VOICE }}
+          TTS_VOICES: ${{ vars.TTS_VOICES }}
+          TREND_PROVIDERS: ${{ vars.TREND_PROVIDERS || 'google,wikipedia' }}
+          TRENDS_GEO: ${{ vars.TRENDS_GEO || 'IN' }}
+          MIN_SOURCES: ${{ vars.MIN_SOURCES || '2' }}
+          SOURCES_FILE: ${{ vars.SOURCES_FILE }}
+          EXTRA_FEEDS: ${{ vars.EXTRA_FEEDS }}
+          DISABLED_SOURCES: ${{ vars.DISABLED_SOURCES }}
         run: |
           ARGS=""
           [ "${{ inputs.force }}" = "true" ] && ARGS="$ARGS --force"
           [ "${{ inputs.dry_run }}" = "true" ] && ARGS="$ARGS --dry-run"
-          case "${{ inputs.format }}" in carousel|reel) ARGS="$ARGS --format ${{ inputs.format }}";; esac
+          case "${{ inputs.format }}" in photo|carousel|reel|video|card) ARGS="$ARGS --format ${{ inputs.format }}";; esac
           python main.py run $ARGS
 
+      - name: Attach dry-run output (post images/video, caption, editorial decision)
+        if: ${{ always() && inputs.dry_run }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: dry-run-preview
+          path: preview/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Commit state (small JSON files only)
-        if: always()
+        if: ${{ always() && !inputs.dry_run }}
         run: |
           git config user.name  "insta-agent[bot]"
           git config user.email "insta-agent@users.noreply.github.com"
-          git add data/history.json data/schedule_state.json data/attempts.json data/health_state.json 2>/dev/null || true
+          # (Skipped for dry runs: a dry run must not change any state.)
+          for f in data/history.json data/schedule_state.json data/attempts.json data/health_state.json \
+                   data/pending_publish.json data/decisions.jsonl data/style_history.json; do
+            [ -f "$f" ] && git add "$f" || true
+          done
           if git diff --cached --quiet; then echo "No state changes"; exit 0; fi
           git commit -m "chore(state): update agent state [skip ci]"
           for i in 1 2 3; do

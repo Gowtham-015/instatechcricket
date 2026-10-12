@@ -11,10 +11,11 @@ import re
 from datetime import datetime, timezone
 
 from . import config
+from .commons import entity_queries
 from .dedupe import cluster_articles, story_fingerprint
 from .feeds import DEFAULT_SOURCE_QUALITY, SOURCE_QUALITY
 
-WEIGHTS = {"freshness": 0.30, "source": 0.20, "importance": 0.20, "confirmation": 0.15, "suitability": 0.15}
+WEIGHTS = {"freshness": 0.30, "source": 0.15, "importance": 0.20, "confirmation": 0.20, "suitability": 0.15}
 HALF_LIFE_HOURS = 6.0
 
 HIGH_SIGNAL = (
@@ -53,6 +54,21 @@ def refine_category(category: str, title: str, summary: str) -> str:
     return category
 
 
+DIGEST_RE = re.compile(
+    r"\b(live updates?|live blog|live:|top (?:\d+ )?(?:stories|headlines|news)|headlines? (?:today|of the day)|"
+    r"morning (?:digest|brief)|evening (?:digest|brief)|news (?:today|roundup|round-up|wrap|digest|bulletin)|"
+    r"newsletter|briefing|in pictures|photos?:|watch:|video:|quiz|horoscope|panchang|"
+    r"today'?s (?:top|news|papers?|cinema|entertainment)|weekly (?:roundup|wrap)|week in review|"
+    r"\d+ (?:things|best|top|must)|what to watch|podcast)\b", re.I)
+
+
+def looks_like_digest(title: str, summary: str, n_sources: int) -> bool:
+    """Roundups / live blogs / newsletters mix several stories: never a good single Reel."""
+    if DIGEST_RE.search(title):
+        return True
+    return n_sources == 1 and len(entity_queries(summary[:1200], limit=10)) >= 5
+
+
 def is_sensitive(text: str) -> bool:
     low = text.lower()
     return any(k in low for k in SENSITIVE)
@@ -81,8 +97,11 @@ def _age_hours(iso: str | None, now: datetime) -> float:
     return (now - datetime.fromisoformat(iso)).total_seconds() / 3600.0
 
 
-def build_clusters(articles: list[dict], now: datetime | None = None) -> list[dict]:
+def build_clusters(articles: list[dict], now: datetime | None = None, trends: list | None = None) -> list[dict]:
     now = now or datetime.now(timezone.utc)
+    report = trends if hasattr(trends, "providers") else None          # TrendReport (status-aware) or a plain list
+    trends = report.trends if report else (trends or [])
+    trend_status = report.status if report else ("ok" if trends else "not-checked")
     out = []
     for group in cluster_articles(articles):
         group.sort(key=lambda a: (-SOURCE_QUALITY.get(a["source"], DEFAULT_SOURCE_QUALITY),
@@ -114,12 +133,61 @@ def build_clusters(articles: list[dict], now: datetime | None = None) -> list[di
             "score": round(score, 1),
             "breakdown": {k: round(v, 1) for k, v in bd.items()},
             "sensitive": is_sensitive(text),
+            "digest": looks_like_digest(lead["title"], " ".join(a["summary"] for a in group[:2]), len(sources)),
+            "trend": None,
             "breaking": False,
+            "signals": {"independent_sources": len(sources), "newest_age_hours": round(newest, 2),
+                        "articles_last_3h": sum(1 for a in group if _age_hours(a["published"], now) <= 3),
+                        "trend_status": trend_status, "trend_query": None, "trend_provider": None,
+                        "trend_volume": None, "trend_volume_unit": None},
         })
+    if trends:
+        from .trends import bonus_for, match_trend
+        for c in out:
+            t = match_trend(c["lead"]["title"], c["lead"]["title"] + " " + " ".join(a["summary"][:300] for a in c["articles"][:3]),
+                            trends)
+            if t:
+                c["trend"] = t.query
+                c["breakdown"]["trend"] = round(bonus_for(t), 1)
+                c["score"] = round(c["score"] + bonus_for(t), 1)
+                provider = getattr(t, "provider", "google")
+                c["signals"].update(trend_query=t.query, trend_provider=provider,
+                                    trend_volume=t.traffic or None,       # only a number the provider really reported
+                                    trend_volume_unit="pageviews/day" if provider == "wikipedia" else "searches (approx.)")
     for c in out:
         c["breaking"] = (c["score"] >= config.BREAKING_SCORE and len(c["sources"]) >= config.BREAKING_MIN_SOURCES
                          and c["age_hours"] <= 3)
+        # Significant = strongly scored, multi-outlet, still fresh. Category balancing never holds these back.
+        c["urgent"] = c["breaking"] or (c["score"] >= config.SIGNIFICANT_SCORE and len(c["sources"]) >= 3
+                                        and c["age_hours"] <= 12)
+        sig = c["signals"]
+        # "trending" needs a real signal (a provider match, or several outlets publishing within hours);
+        # an important story that nobody is amplifying yet is labelled "important", not "trending".
+        c["kind"] = ("trending" if c["trend"] or sig["articles_last_3h"] >= 3
+                     else "important" if c["breakdown"]["importance"] >= 70 or c["urgent"] else "routine")
+        c["why"] = explain_score(c)
     return sorted(out, key=lambda c: -c["score"])
+
+
+def explain_score(c: dict) -> str:
+    """One line saying why a story ranks where it does (logged for every top candidate)."""
+    bd, sig = c["breakdown"], c.get("signals", {})
+    parts = [f"score {c['score']:.0f}", f"{sig.get('independent_sources', len(c['sources']))} outlet(s)",
+             f"newest {sig.get('newest_age_hours', c['age_hours']):.1f}h old",
+             "fresh {:.0f} / source {:.0f} / importance {:.0f} / confirmation {:.0f}".format(
+                 bd["freshness"], bd["source"], bd["importance"], bd["confirmation"])]
+    if c.get("trend"):
+        vol = sig.get("trend_volume")
+        parts.append(f"trend '{c['trend']}' via {sig.get('trend_provider')}" +
+                     (f" (~{vol:,} {sig.get('trend_volume_unit')})" if vol else " (volume not reported)"))
+    else:
+        st = sig.get("trend_status", "not-checked")
+        parts.append("no matching trend" + (" - trend providers unavailable, so absence is unknown"
+                                            if st in ("unavailable", "partial-unavailable") else ""))
+    if c.get("urgent"):
+        parts.append("urgent: overrides category balancing")
+    parts.append(f"kind={c.get('kind', 'routine')}")
+    return " | ".join(parts)
 
 
 def pick_next(clusters: list[dict], recent_categories: list[str], weights: dict[str, float], *,
@@ -127,10 +195,12 @@ def pick_next(clusters: list[dict], recent_categories: list[str], weights: dict[
     exclude = exclude or set()
     eligible = [c for c in clusters
                 if c["score"] >= min_score and c["fingerprint"] not in exclude
-                and not (skip_sensitive and c["sensitive"])]
+                and not (skip_sensitive and c["sensitive"])
+                and not c.get("digest")                                              # roundups are never single stories
+                and (len(c["sources"]) >= config.MIN_SOURCES or c.get("trend"))]     # widely covered or Google-trending
     if not eligible:
         return None
-    breaking = [c for c in eligible if c["breaking"]]
+    breaking = [c for c in eligible if c["breaking"] or c.get("urgent")]
     if breaking:
         return max(breaking, key=lambda c: c["score"])
 

@@ -14,4 +14,8 @@ data/*.lock
 data/ai_cache.json
 data/seen_cache.json
 data/stock_cache.json
+data/commons_cache.json
 broll/
+data/openverse_cache.json
+data/trends_cache.json
+drafts/

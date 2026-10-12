@@ -37,6 +37,10 @@ class ContentError(ValueError):
     pass
 
 
+class UnfocusedStoryError(RuntimeError):
+    """The source material is a roundup / several unrelated stories, so no single coherent Reel can be made."""
+
+
 _BAD_MODEL_WORDS = ("lite", "image", "tts", "live", "audio", "embedding", "exp", "thinking", "computer",
                     "robotics", "omni", "native", "vision", "learnlm", "gemma")
 
@@ -93,6 +97,16 @@ def numbers_grounded(generated: str, source: str) -> list[str]:
     return [n for n in _numbers(generated) if len(n.replace(".", "")) >= 2 and n not in src]
 
 
+_QUOTE = re.compile(r"[\"“]([^\"”]{12,})[\"”]")
+
+
+def quotes_grounded(generated: str, source: str) -> list[str]:
+    """Quoted speech in the copy must appear (almost) verbatim in the sources - the model may not invent quotes."""
+    norm = lambda t: re.sub(r"[^a-z0-9 ]", "", re.sub(r"\s+", " ", t.lower().replace("’", "'")))   # noqa: E731
+    src = norm(source)
+    return [q for q in _QUOTE.findall(generated) if len(q.split()) >= 4 and norm(q) not in src]
+
+
 def is_generic(text: str) -> bool:
     low = text.lower()
     return any(p in low for p in GENERIC_PHRASES)
@@ -120,13 +134,18 @@ def build_hashtags(ai_tags: list[str] | None, category: str) -> list[str]:
 
 
 # ----------------------------------------------------------------- caption
-def compose_caption(content: dict, cluster: dict, footage_credit: str | None = None) -> str:
+def compose_caption(content: dict, cluster: dict, footage_credit: str | None = None,
+                    images_credit: str | None = None, notes: list[str] | None = None) -> str:
     emoji = CATEGORY_EMOJI.get(cluster["category"], "📰")
     credit = ", ".join(cluster["sources"][:3]) + (f" | Footage: {footage_credit}" if footage_credit else "")
     tail_parts = []
     if content.get("why_it_matters"):
         tail_parts.append(f"💡 Why it matters: {content['why_it_matters']}")
     tail_parts.append(f"📌 Source: {credit}")
+    for n in notes or []:
+        tail_parts.append(n)
+    if images_credit:
+        tail_parts.append(f"📷 Images: {images_credit}")
     tail_parts.append(f"👉 Follow {config.ACCOUNT_HANDLE} for daily updates. Save & share!")
     tail = "\n\n".join(tail_parts)
     tags = " ".join(content["hashtags"])
@@ -138,10 +157,19 @@ def compose_caption(content: dict, cluster: dict, footage_credit: str | None = N
     return caption
 
 
+def compose_link_message(content: dict, cluster: dict) -> str:
+    """Telegram-style text for a Facebook LINK post: Facebook adds the publisher's own preview card under it."""
+    emoji = CATEGORY_EMOJI.get(cluster["category"], "📰")
+    body = content.get("why_it_matters") or trim(content.get("caption", "").split("\n")[0], 220)
+    return trim(f"{emoji} {content['hook']}\n\n{body}\n\n📌 Source: {', '.join(cluster['sources'][:3])}", 600, keep_breaks=True)
+
+
 # ----------------------------------------------------------------- validation
 def validate_content(data: dict, source_text: str, category: str) -> dict:
     if not isinstance(data, dict):
         raise ContentError("response is not a JSON object")
+    if data.get("unfocused") is True:
+        raise UnfocusedStoryError("source material covers several unrelated stories")
     hook = trim(str(data.get("hook", "")), 80)
     if len(hook) < 15:
         raise ContentError("hook too short")
@@ -170,6 +198,9 @@ def validate_content(data: dict, source_text: str, category: str) -> dict:
     bad = numbers_grounded(blob, source_text)
     if bad:
         raise ContentError(f"numbers not found in sources: {bad[:3]}")
+    badq = quotes_grounded(blob, source_text)
+    if badq:
+        raise ContentError(f"quotation not found in sources: {badq[0][:60]}")
     return {
         "hook": hook,
         "slides": slides,
@@ -180,10 +211,28 @@ def validate_content(data: dict, source_text: str, category: str) -> dict:
 
 
 # ----------------------------------------------------------------- reel script
+def validate_scorecard(sc, source_text: str) -> dict | None:
+    """Cricket result card. Facts only: anything not literally supported by the sources drops the card
+    (the Reel is still made, just without it) instead of risking a wrong score."""
+    if not isinstance(sc, dict):
+        return None
+    f = {k: trim(str(sc.get(k) or ""), 42) for k in ("team_a", "score_a", "team_b", "score_b", "result", "highlight")}
+    if not (f["team_a"] and f["team_b"] and f["score_a"] and f["score_b"] and f["result"]):
+        return None
+    low = source_text.lower()
+    if f["team_a"].lower() not in low or f["team_b"].lower() not in low:
+        return None
+    if numbers_grounded(" ".join(f.values()), source_text):
+        return None
+    return f
+
+
 def validate_reel(data: dict, source_text: str, category: str) -> dict:
     """Narration for a voiced Reel: short spoken sentences, grounded numbers, no filler."""
     if not isinstance(data, dict):
         raise ContentError("response is not a JSON object")
+    if data.get("unfocused") is True:
+        raise UnfocusedStoryError("source material covers several unrelated stories")
     hook = trim(str(data.get("hook", "")), 70)
     if len(hook) < 15:
         raise ContentError("hook too short")
@@ -214,16 +263,27 @@ def validate_reel(data: dict, source_text: str, category: str) -> dict:
                        *[(f"narration{i}", n) for i, n in enumerate(narration)]):
         if is_generic(txt):
             raise ContentError(f"{label} contains generic filler")
-    bad = numbers_grounded(" ".join([hook, why, caption] + narration), source_text)
+    blob = " ".join([hook, why, caption] + narration)
+    bad = numbers_grounded(blob, source_text)
     if bad:
         raise ContentError(f"numbers not found in sources: {bad[:3]}")
+    badq = quotes_grounded(blob, source_text)
+    if badq:
+        raise ContentError(f"quotation not found in sources: {badq[0][:60]}")
     queries = []
     for q in (data.get("broll_queries") or []):
         if isinstance(q, str):
             q = " ".join(re.sub(r"[^A-Za-z ]", " ", q).lower().split()[:5])
             if q and q not in queries:
                 queries.append(q)
-    return {"hook": hook, "narration": narration, "broll_queries": queries[:5], "why_it_matters": why,
+    photos = []
+    for q in (data.get("photo_queries") or []):
+        if isinstance(q, str):
+            q = " ".join(re.sub(r"[^A-Za-z0-9' ]", " ", q).split()[:5])
+            if q and q.lower() not in {x.lower() for x in photos}:
+                photos.append(q)
+    return {"hook": hook, "narration": narration, "broll_queries": queries[:5], "photo_queries": photos[:5],
+            "scorecard": validate_scorecard(data.get("scorecard"), source_text), "why_it_matters": why,
             "caption": caption, "hashtags": build_hashtags(data.get("hashtags"), category)}
 
 
@@ -236,7 +296,8 @@ def fallback_reel(cluster: dict) -> dict:
         if sl["body"].strip() and sl["body"].strip().lower() != lead["title"].strip().lower():
             sentences.append(sl["body"].strip())
     narration = [trim(x, 170) for x in sentences[:3]]
-    return {"hook": base["hook"], "narration": narration, "broll_queries": [], "why_it_matters": None,
+    return {"hook": base["hook"], "narration": narration, "broll_queries": [], "photo_queries": [], "scorecard": None,
+            "why_it_matters": None,
             "caption": base["caption"], "hashtags": base["hashtags"]}
 
 
@@ -277,8 +338,12 @@ def build_prompt(cluster: dict) -> tuple[str, str]:
     for a in cluster["articles"][:3]:
         parts.append(f"[{a['source']}] {a['title']}\n{a['summary'][:700]}")
     source_text = "\n\n".join(parts)
+    editor_notes = ("- " + cluster["editor_notes"].replace("\n", "\n- ")) if cluster.get("editor_notes") else ""
     prompt = f"""You are the editor of a professional Instagram news page ({config.BRAND_NAME}).
 Turn the SOURCE MATERIAL into a 5-slide carousel post for the category "{cluster['category']}".
+
+FIRST decide: is the SOURCE MATERIAL about ONE single news story? If it is a roundup, live blog, newsletter or a
+mix of several unrelated stories, return ONLY {{"unfocused": true}} and nothing else.
 
 STRICT RULES
 - Use ONLY facts present in the SOURCE MATERIAL. Never invent numbers, quotes, names, dates or outcomes.
@@ -286,6 +351,8 @@ STRICT RULES
 - "why_it_matters" must be specific to THIS story (impact on people, money, a team, a user, a policy).
   Never write filler such as "developing story" or "key updates".
 - Do not mention links, "link in bio" or "stay tuned".
+- Attribute allegations, claims and disputed figures to whoever made them; never present them as established fact.
+{editor_notes}
 - "slides" must contain exactly 3 items (the cover and closing slides are added automatically).
 
 Return ONLY JSON with exactly this shape:
@@ -306,15 +373,23 @@ SOURCE MATERIAL
 def build_reel_prompt(cluster: dict) -> tuple[str, str]:
     parts = [f"[{a['source']}] {a['title']}\n{a['summary'][:700]}" for a in cluster["articles"][:3]]
     source_text = "\n\n".join(parts)
+    opener = ("- " + cluster["style_hint"]) if cluster.get("style_hint") else ""
+    editor_notes = ("- " + cluster["editor_notes"].replace("\n", "\n- ")) if cluster.get("editor_notes") else ""
     prompt = f"""You write VOICEOVER SCRIPTS for fast, engaging Instagram Reels about news ({config.BRAND_NAME}).
 Category: "{cluster['category']}". Turn the SOURCE MATERIAL into a 20-25 second spoken script.
+
+FIRST decide: is the SOURCE MATERIAL about ONE single news story? If it is a roundup, live blog, newsletter or a
+mix of several unrelated stories, return ONLY {{"unfocused": true}} and nothing else.
 
 STRICT RULES
 - Use ONLY facts in the SOURCE MATERIAL. Never invent numbers, quotes, names, dates or outcomes.
 - Write for the EAR: short, conversational, punchy sentences (max 18 words), active voice, no jargon.
 - Sentence 1 must be a strong hook that makes people keep watching (a surprising fact or question from the source).
+{opener}
 - 4-6 sentences, 45-70 words in total. Do NOT add a "follow us" line (it is added automatically).
 - No emojis, hashtags, links, handles, or filler like "developing story" or "stay tuned".
+- Attribute allegations, claims and disputed figures to whoever made them; never present them as established fact.
+{editor_notes}
 - "why_it_matters" must be specific to THIS story.
 - "broll_queries": 4-5 stock-footage search terms, MOST SPECIFIC FIRST, each 2-3 plain words naming something a
   camera can actually film (objects, places, actions). NO abstract words (issues, appeals, pending, policy, crisis,
@@ -322,11 +397,22 @@ STRICT RULES
   queue"; court story -> "courtroom gavel", "legal documents"; cricket win -> "cricket team celebration",
   "stadium crowd cheering"; chip launch -> "circuit board", "smartphone screen"; flood -> "flood water street".
 
+- "photo_queries": 2-5 REAL, photographable subjects named in the story - people, places, institutions, teams, events
+  (1-4 words each, proper names allowed), e.g. "Eden Gardens", "Election Commission of India", "Virat Kohli".
+  They are used to find real documentary photographs, so only include subjects the story is actually about.
+
+- "scorecard": ONLY if the story reports the RESULT of a specific cricket match, fill it using the source's own
+  words and numbers (scores exactly as written, e.g. "287/6" or "254 all out"; "highlight" = best performer line, optional).
+  For any other story set "scorecard" to null.
+
 Return ONLY JSON with exactly this shape:
 {{
   "hook": "on-screen headline, 20-65 chars",
   "narration": ["sentence one", "sentence two"],
   "broll_queries": ["term one", "term two", "term three"],
+  "photo_queries": ["Named Person", "Named Place"],
+  "scorecard": {{"team_a": "India", "score_a": "287/6", "team_b": "Australia", "score_b": "254 all out",
+                 "result": "India won by 33 runs", "highlight": "Kohli 112 (98)"}},
   "why_it_matters": "1-2 sentences, 60-200 chars",
   "caption": "2 short paragraphs, 200-700 chars, no hashtags",
   "hashtags": ["8 relevant lowercase hashtags without spaces"]
@@ -439,6 +525,8 @@ class AIWriter:
                                               max_age_hours=config.AI_CACHE_TTL_HOURS)
                     write_json(self.cache_path, cache)
                     return content, "ai"
+                except UnfocusedStoryError:
+                    raise                      # not a retryable copy problem: skip this story entirely
                 except Exception as e:
                     last_err = str(e)[:160]
                     log.warning("AI attempt %d/%d failed: %s: %s", attempt, config.AI_MAX_ATTEMPTS, type(e).__name__,

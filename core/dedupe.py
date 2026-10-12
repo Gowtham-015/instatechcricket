@@ -45,10 +45,12 @@ def jaccard(a: frozenset, b: frozenset) -> float:
 
 
 def dedupe_batch(articles: list[dict]) -> list[dict]:
+    """Drop the SAME article seen twice (same URL, or the same headline from the same outlet). The same headline from a
+    DIFFERENT outlet is kept: that is corroboration (syndicated/wire copy), which clustering and ranking rely on."""
     seen_urls, seen_titles, out = set(), set(), []
     for a in articles:
         cu = canonical_url(a["url"])
-        tk = title_key(a["title"])
+        tk = (a.get("source", ""), title_key(a["title"]))
         if cu in seen_urls or tk in seen_titles:
             continue
         seen_urls.add(cu)

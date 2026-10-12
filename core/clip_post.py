@@ -180,6 +180,7 @@ def post_clip(pipeline, *, video: Path, topic: str, credit: str, notes: str = ""
             if not pipeline._reachable(hosted[0].url, "video"):
                 raise MediaHostError("hosted video not publicly reachable")
             result = pipeline.ig.publish_reel(hosted[0].url, caption)
+            record["facebook"] = pipeline.facebook_publish("reel", [hosted[0].url], caption, content, cluster)
         finally:
             for h in hosted:
                 try:

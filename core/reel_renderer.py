@@ -17,12 +17,13 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageOps
 
 from . import config
 from .feeds import CATEGORY_STYLE
 from .image_renderer import clean_for_image, fit_text, hex_rgb, load_font
 from .tts import Voiceover
+from .variety import CLASSIC, ReelStyle
 from .video_renderer import VideoError, find_ffmpeg
 
 log = logging.getLogger("reel")
@@ -114,23 +115,72 @@ def segment_plan(total: float) -> tuple[int, float]:
     return n, total / n + 0.1
 
 
-def prepare_footage_background(clips: list[Path], total: float, tmp: Path) -> Path:
-    """Cut the clips into equal 9:16 segments (with the dark gradient baked in) and join them."""
+def _credit_overlay(base: Image.Image, credit: str | None) -> Image.Image:
+    """Dark top/bottom ramps (for caption legibility) + optional small credit line for the segment's photo."""
+    ov = base.copy()
+    if credit:
+        d = ImageDraw.Draw(ov)
+        f, lines, lh = fit_text(d, "Photo: " + clean_for_image(credit), 760, 90, start=30, min_size=22, bold=False)
+        y = 1330
+        for ln in lines[:2]:
+            d.text((96, y), ln, font=f, fill=(255, 255, 255), stroke_width=4, stroke_fill=(8, 8, 16))
+            y += lh
+    return ov
+
+
+def _clip_segment(ff: str, clip: Path, start: float, seg: float, fps: int, overlay_png: Path, out: Path) -> None:
+    flt = ("[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,"
+           f"fps={fps},tpad=stop_mode=clone:stop_duration=30[b];[b][1:v]overlay=0:0:format=auto,format=yuv420p[o]")
+    _run([ff, "-y", "-loglevel", "error", "-ss", f"{start:.2f}", "-i", str(clip), "-loop", "1", "-i", str(overlay_png),
+          "-filter_complex", flt, "-map", "[o]", "-t", f"{seg:.2f}", "-an", "-c:v", "libx264", "-preset", "veryfast",
+          "-crf", "21", "-pix_fmt", "yuv420p", "-r", str(fps), str(out)], f"segment {out.stem}")
+
+
+def _photo_segment(ff: str, photo: Path, credit: str, seg: float, fps: int, overlay_png: Path, out: Path,
+                   tmp: Path, reverse: bool) -> None:
+    """Documentary 'Ken Burns' on a real photograph: slow pan across a landscape photo, slow push-in on portraits."""
+    img = ImageOps.exif_transpose(Image.open(photo)).convert("RGB")
+    ar = img.width / img.height
+    base = tmp / f"{out.stem}_base.jpg"
+    if ar >= 0.9:        # landscape / square: fill the height, pan across the width
+        w = min(int(round(ar * H)), 4600)
+        img.resize((w, H), Image.LANCZOS).save(base, quality=93)
+        direction = "(1-min(t/%.3f,1))" % seg if reverse else "min(t/%.3f,1)" % seg
+        vf = f"crop=1080:1920:x='(iw-1080)*{direction}':y=0,fps={fps},setsar=1"
+    else:                # tall photo: blurred fill + the full picture, slow push-in
+        bg = ImageOps.fit(img, (W, H), Image.LANCZOS).filter(ImageFilter.GaussianBlur(40))
+        fg = ImageOps.contain(img, (W, 1500), Image.LANCZOS)
+        bg.paste(fg, ((W - fg.width) // 2, (H - fg.height) // 2))
+        bg.save(base, quality=93)
+        vf = (f"scale=w='trunc(1080*(1+0.07*min(t/{seg:.3f},1))/2)*2':h=-2:eval=frame,"
+              f"crop=1080:1920,fps={fps},setsar=1")
+    flt = f"[0:v]{vf}[b];[b][1:v]overlay=0:0:format=auto,format=yuv420p[o]"
+    _run([ff, "-y", "-loglevel", "error", "-loop", "1", "-framerate", str(fps), "-i", str(base), "-loop", "1", "-i",
+          str(overlay_png), "-filter_complex", flt, "-map", "[o]", "-t", f"{seg:.2f}", "-an", "-c:v", "libx264",
+          "-preset", "veryfast", "-crf", "21", "-pix_fmt", "yuv420p", "-r", str(fps), str(out)], f"photo {out.stem}")
+
+
+def prepare_mixed_background(items: list[dict], total: float, tmp: Path, flip: bool = False) -> Path:
+    """items: [{'kind': 'photo'|'clip', 'path': Path, 'credit': str}] cycled over equal-length segments."""
     ff = _ffmpeg()
-    grad = tmp / "grad.png"
-    gradient_overlay().save(grad)
-    n, seg = segment_plan(total)
     fps = config.VIDEO_FPS
-    segs = []
+    n, seg = segment_plan(total)
+    base_grad = gradient_overlay()
+    plain = tmp / "grad.png"
+    base_grad.save(plain)
+    segs, offsets = [], {}
     for i in range(n):
-        clip = clips[i % len(clips)]
-        start = (i // len(clips)) * seg
+        it = items[i % len(items)]
         out = tmp / f"seg_{i:02d}.mp4"
-        flt = ("[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,"
-               f"fps={fps},tpad=stop_mode=clone:stop_duration=30[b];[b][1:v]overlay=0:0:format=auto,format=yuv420p[o]")
-        _run([ff, "-y", "-loglevel", "error", "-ss", f"{start:.2f}", "-i", str(clip), "-loop", "1", "-i", str(grad),
-              "-filter_complex", flt, "-map", "[o]", "-t", f"{seg:.2f}", "-an", "-c:v", "libx264",
-              "-preset", "veryfast", "-crf", "21", "-pix_fmt", "yuv420p", "-r", str(fps), str(out)], f"segment {i}")
+        if it["kind"] == "photo":
+            ov = tmp / f"ov_{i:02d}.png"
+            _credit_overlay(base_grad, it.get("credit")).save(ov)
+            _photo_segment(ff, Path(it["path"]), it.get("credit", ""), seg, fps, ov, out, tmp, reverse=bool((i + int(flip)) % 2))
+        else:
+            key = str(it["path"])
+            start = offsets.get(key, 0.0)
+            offsets[key] = start + seg
+            _clip_segment(ff, Path(it["path"]), start, seg, fps, plain, out)
         segs.append(out)
     listing = tmp / "list.txt"
     listing.write_text("".join(f"file '{p.as_posix()}'\n" for p in segs), encoding="utf-8")
@@ -138,6 +188,11 @@ def prepare_footage_background(clips: list[Path], total: float, tmp: Path) -> Pa
     _run([ff, "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(listing), "-c", "copy", str(bg)],
          "concat")
     return bg
+
+
+def prepare_footage_background(clips: list[Path], total: float, tmp: Path) -> Path:
+    """Cut the stock/own clips into equal 9:16 segments (dark gradient baked in) and join them."""
+    return prepare_mixed_background([{"kind": "clip", "path": c, "credit": ""} for c in clips], total, tmp)
 
 
 def prepare_animated_background(category: str, total: float, tmp: Path) -> Path:
@@ -252,14 +307,18 @@ def _render_chunk(words: list[str], accent, size: int = 112) -> list[Image.Image
     return imgs
 
 
-def build_caption_chunks(words: list[tuple[str, float, float]], category: str, total: float) -> list[Chunk]:
-    accent = _accent(category)
+def build_caption_chunks(words: list[tuple[str, float, float]], category: str, total: float,
+                         style: ReelStyle | None = None) -> list[Chunk]:
+    style = style or CLASSIC
+    accent = style.highlight_rgb or _accent(category)
     out: list[Chunk] = []
-    groups = chunk_words(words)
+    if style.caption_upper:
+        words = [(w.upper(), s, e) for w, s, e in words]
+    groups = chunk_words(words, max_words=style.caption_words)
     for gi, g in enumerate(groups):
         start = g[0][1]
         nxt = groups[gi + 1][0][1] if gi + 1 < len(groups) else min(g[-1][2] + 0.25, total)
-        out.append(Chunk(start, max(nxt, start + 0.2), [w[1] for w in g], _render_chunk([w[0] for w in g], accent)))
+        out.append(Chunk(start, max(nxt, start + 0.2), [w[1] for w in g], _render_chunk([w[0] for w in g], accent, style.caption_size)))
     return out
 
 
@@ -290,24 +349,73 @@ def build_top_bar(cluster: dict) -> Image.Image:
     return img
 
 
-def build_hook(hook: str) -> Image.Image:
-    img = Image.new("RGBA", (W, 520), (0, 0, 0, 0))   # y 400..920 -> always clear of the captions (centre y=1130)
+def build_hook(hook: str, layout: str = "left", accent=None) -> Image.Image:
+    """Headline of the first seconds. layout: left (original), center, or box (text on a dark panel with an accent bar)."""
+    img = Image.new("RGBA", (W, 520), (0, 0, 0, 0))   # placed so it is always clear of the captions
     d = ImageDraw.Draw(img)
+    if layout == "box":
+        font, lines, lh = fit_text(d, hook, 760, 400, start=92, min_size=56)
+        h = lh * len(lines) + 56
+        d.rounded_rectangle((64, 8, W - 64, 8 + h), radius=34, fill=(8, 8, 18, 188))
+        d.rounded_rectangle((64, 8, 82, 8 + h), radius=9, fill=accent or (255, 214, 10))
+        y = 36
+        for ln in lines:
+            _stroked(d, (112, y), ln, font, (255, 255, 255), 4)
+            y += lh
+        return img
     font, lines, lh = fit_text(d, hook, 834, 500, start=104, min_size=60)
     y = 10
     for ln in lines:
-        _stroked(d, (96, y), ln, font, (255, 255, 255), 9)
+        x = (W - d.textlength(ln, font=font)) / 2 if layout == "center" else 96
+        _stroked(d, (x, y), ln, font, (255, 255, 255), 9)
         y += lh
     return img
 
 
-def build_outro(cluster: dict) -> Image.Image:
+def build_scorecard(sc: dict, cluster: dict) -> Image.Image:
+    """Broadcast-style result card (own graphics, facts only): teams, scores, result, top performer."""
     accent = _accent(cluster["category"])
+    w, h = 912, 520
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle((0, 0, w - 1, h - 1), radius=36, fill=(8, 12, 26, 222), outline=(*accent, 255), width=4)
+    f_tag = load_font(30, True)
+    tag = "FINAL RESULT"
+    tw = d.textlength(tag, font=f_tag)
+    d.rounded_rectangle((36, 30, 36 + tw + 40, 30 + f_tag.size + 22), radius=24, fill=accent)
+    d.text((56, 41), tag, font=f_tag, fill=(15, 15, 25))
+    y = 124
+    rows = ((sc["team_a"], clean_for_image(sc["score_a"])), (sc["team_b"], clean_for_image(sc["score_b"])))
+    size = 56
+    while size > 34 and max(d.textlength(sco, font=load_font(size, True)) for _, sco in rows) > 420:
+        size -= 4                                   # both scores always share one size
+    f_score = load_font(size, True)
+    for team, score in rows:
+        sw = d.textlength(score, font=f_score)
+        d.text((w - 40 - sw, y + 6), score, font=f_score, fill=(255, 255, 255))
+        f_team, lines, _ = fit_text(d, team, w - 80 - int(sw) - 24, 70, start=56, min_size=30)
+        d.text((40, y + 6), lines[0], font=f_team, fill=(255, 255, 255))
+        y += 96
+    d.rectangle((40, y + 4, w - 40, y + 7), fill=(*accent, 255))
+    f_res, lines, lh = fit_text(d, sc["result"], w - 80, 100, start=46, min_size=30)
+    ty = y + 28
+    for ln in lines[:2]:
+        d.text((40, ty), ln, font=f_res, fill=accent)
+        ty += lh
+    if sc.get("highlight"):
+        f_hi, lines, lh = fit_text(d, "Top performer: " + sc["highlight"], w - 80, 70, start=34, min_size=24, bold=False)
+        d.text((40, h - 40 - lh), lines[0], font=f_hi, fill=(230, 235, 245))
+    return img
+
+
+def build_outro(cluster: dict, style: ReelStyle | None = None) -> Image.Image:
+    style = style or CLASSIC
+    accent = style.highlight_rgb or _accent(cluster["category"])
     img = Image.new("RGBA", (W, H), (0, 0, 0, 178))
     d = ImageDraw.Draw(img)
     big, mid = load_font(72, True), load_font(86, True)
     y = 700
-    for text, font, fill in (("Follow for daily updates", big, (255, 255, 255)),
+    for text, font, fill in ((style.outro_text, big, (255, 255, 255)),
                              (clean_for_image(config.ACCOUNT_HANDLE), mid, accent)):
         x = (W - d.textlength(text, font=font)) / 2
         d.text((x, y), text, font=font, fill=fill)
@@ -349,12 +457,19 @@ def _audio_args(voice: Voiceover | None, music: Path | None, total: float) -> tu
 
 # ------------------------------------------------------------------ composition
 def compose_reel(bg: Path, content: dict, cluster: dict, words: list[tuple[str, float, float]], total: float,
-                 voice: Voiceover | None, music: Path | None, out_path: Path) -> Path:
+                 voice: Voiceover | None, music: Path | None, out_path: Path, style: ReelStyle | None = None) -> Path:
+    style = style or CLASSIC
     ff = _ffmpeg()
     fps = config.VIDEO_FPS
     n_frames = int(round(total * fps))
-    chunks = build_caption_chunks(words, cluster["category"], total)
-    top_bar, hook_img, outro_img = build_top_bar(cluster), build_hook(content["hook"]), build_outro(cluster)
+    chunks = build_caption_chunks(words, cluster["category"], total, style)
+    scorecard = content.get("scorecard")
+    top_bar, outro_img = build_top_bar(cluster), build_outro(cluster, style)
+    hook_img = (build_scorecard(scorecard, cluster) if scorecard else
+                build_hook(content["hook"], style.hook_layout, style.highlight_rgb or _accent(cluster["category"])))
+    hook_y = 400 if scorecard else style.hook_y
+    outro_at = total - OUTRO
+    hw = (0.3, max(0.8, min(8.5, outro_at - 0.4))) if scorecard else HOOK_WINDOW   # the result card stays longer
     hook_steps = {k: _scaled_alpha(hook_img, k / 6) for k in range(1, 7)}
     outro_steps = {k: _scaled_alpha(outro_img, k / 6) for k in range(1, 7)}
     outro_start = total - OUTRO
@@ -367,7 +482,8 @@ def compose_reel(bg: Path, content: dict, cluster: dict, words: list[tuple[str, 
                     "-pix_fmt", "yuv420p", "-r", str(fps), "-g", str(fps * 2),
                     "-c:a", "aac", "-b:a", "160k", "-ar", "44100", "-ac", "2",
                     "-movflags", "+faststart", "-shortest", str(out_path)])
-    reader = subprocess.Popen([ff, "-v", "error", "-i", str(bg), "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+    grade = ["-vf", style.grade_filter] if style.grade_filter else []
+    reader = subprocess.Popen([ff, "-v", "error", "-i", str(bg), *grade, "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
                               stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     frame_bytes, last_raw, ci = W * H * 3, b"", 0
     try:
@@ -382,10 +498,11 @@ def compose_reel(bg: Path, content: dict, cluster: dict, words: list[tuple[str, 
             frame = Image.frombytes("RGB", (W, H), raw)
             frame.paste(top_bar, (0, 250), top_bar)
 
-            if HOOK_WINDOW[0] <= t < HOOK_WINDOW[1]:  # fade in / out of the headline
-                k = min(6, max(1, int(((t - HOOK_WINDOW[0]) / 0.3) * 6) + 1),
-                        max(1, int(((HOOK_WINDOW[1] - t) / 0.3) * 6) + 1))
-                frame.paste(hook_steps[k], (0, 400), hook_steps[k])
+            if hw[0] <= t < hw[1]:  # fade in / out of the headline (or the result card)
+                k = min(6, max(1, int(((t - hw[0]) / 0.3) * 6) + 1),
+                        max(1, int(((hw[1] - t) / 0.3) * 6) + 1))
+                rise = int(max(0.0, 1 - (t - hw[0]) / 0.35) * 46) if style.hook_anim == "rise" and not scorecard else 0
+                frame.paste(hook_steps[k], (0, hook_y + rise), hook_steps[k])
 
             while ci + 1 < len(chunks) and t >= chunks[ci + 1].start:
                 ci += 1
@@ -397,7 +514,7 @@ def compose_reel(bg: Path, content: dict, cluster: dict, words: list[tuple[str, 
                 if age < 0.18:  # quick pop-in
                     s = 0.84 + 0.16 * (age / 0.18)
                     img = img.resize((max(1, int(img.width * s)), max(1, int(img.height * s))), Image.BICUBIC)
-                frame.paste(img, (int((W - img.width) / 2), int(CAPTION_Y - img.height / 2)), img)
+                frame.paste(img, (int((W - img.width) / 2), int(style.caption_y - img.height / 2)), img)
 
             if t >= outro_start:
                 k = min(6, int(((t - outro_start) / 0.4) * 6) + 1)

@@ -238,7 +238,15 @@
       }
     ],
     "media_id": "17984396871108382",
-    "permalink": "https://www.instagram.com/reel/DeIDTJHjxkG/"
+    "permalink": "https://www.instagram.com/reel/DeIDTJHjxkG/",
+    "insights": {
+      "reach": 13,
+      "saved": 0,
+      "shares": 0,
+      "likes": 0,
+      "comments": 0,
+      "total_interactions": 0
+    }
   },
   {
     "id": "20261005202515_a3f64e95",
@@ -264,7 +272,15 @@
       }
     ],
     "media_id": "18132828664661754",
-    "permalink": "https://www.instagram.com/reel/DeIEjDbja0s/"
+    "permalink": "https://www.instagram.com/reel/DeIEjDbja0s/",
+    "insights": {
+      "reach": 3,
+      "saved": 0,
+      "shares": 0,
+      "likes": 0,
+      "comments": 0,
+      "total_interactions": 0
+    }
   },
   {
     "id": "20261006043212_5c321d25",
@@ -290,6 +306,554 @@
       }
     ],
     "media_id": "18091552844663974",
-    "permalink": "https://www.instagram.com/reel/DeI76VGlCjA/"
+    "permalink": "https://www.instagram.com/reel/DeI76VGlCjA/",
+    "insights": {
+      "reach": 0,
+      "saved": 0,
+      "shares": 0,
+      "likes": 0,
+      "comments": 0,
+      "total_interactions": 0
+    }
+  },
+  {
+    "id": "20261006194717_1e163a22",
+    "title": "Tremors felt across Delhi-NCR as 4.9-magnitude quake hits Uttarakhand’s Chamoli",
+    "url": "https://www.thehindu.com/news/national/tremors-felt-across-delhi-ncr-as-49-magnitude-quake-hits-uttarakhands-chamoli/article71553036.ece",
+    "category": "News",
+    "fingerprint": "1e163a22df8467",
+    "sources": [
+      "The Hindu",
+      "Times of India"
+    ],
+    "score": 55.2,
+    "breaking": false,
+    "mode": "ai",
+    "slot": null,
+    "caption_len": 1092,
+    "published_at": "2026-10-06T19:47:17.831423+00:00",
+    "format": "reel",
+    "reel": "voice=True footage=pixabay +photos",
+    "articles": [
+      {
+        "url": "https://www.thehindu.com/news/national/tremors-felt-across-delhi-ncr-as-49-magnitude-quake-hits-uttarakhands-chamoli/article71553036.ece",
+        "title": "Tremors felt across Delhi-NCR as 4.9-magnitude quake hits Uttarakhand’s Chamoli"
+      },
+      {
+        "url": "https://timesofindia.indiatimes.com/india/earthquake-tremors-felt-in-delhi-ncr/articleshow/134746208.cms",
+        "title": "4.9-magnitude earthquake hits Uttarakhand's Chamoli, tremors felt in Delhi-NCR"
+      }
+    ],
+    "media_id": "18599639014064905",
+    "permalink": "https://www.instagram.com/reel/DeKlYTTGJGh/",
+    "insights": {
+      "reach": 120,
+      "saved": 0,
+      "shares": 0,
+      "likes": 1,
+      "comments": 0,
+      "total_interactions": 1
+    }
+  },
+  {
+    "id": "20261006203627_eb9b9b74",
+    "title": "Farbrace leaves Sussex to join Lancashire",
+    "url": "https://www.bbc.co.uk/sport/cricket/articles/cjdx3ylzg3yyo?at_medium=RSS&at_campaign=rss",
+    "category": "Sports",
+    "fingerprint": "eb9b9b74006a9e",
+    "sources": [
+      "BBC Sport",
+      "ESPN Cricinfo"
+    ],
+    "score": 50.2,
+    "breaking": false,
+    "mode": "ai",
+    "slot": null,
+    "caption_len": 1048,
+    "published_at": "2026-10-06T20:36:27.900543+00:00",
+    "format": "reel",
+    "reel": "voice=True footage=pixabay +photos",
+    "articles": [
+      {
+        "url": "https://www.bbc.co.uk/sport/cricket/articles/cjdx3ylzg3yyo?at_medium=RSS&at_campaign=rss",
+        "title": "Farbrace leaves Sussex to join Lancashire"
+      },
+      {
+        "url": "https://www.cricinfo.com/ci/content/story/1557324.html?ex_cid=OTC-RSS",
+        "title": "Paul Farbrace leaves Sussex to join Lancashire as director of cricket"
+      }
+    ],
+    "media_id": "18094367930410603",
+    "permalink": "https://www.instagram.com/reel/DeKq6cKjiAl/",
+    "insights": {
+      "reach": 112,
+      "saved": 0,
+      "shares": 0,
+      "likes": 1,
+      "comments": 0,
+      "total_interactions": 1
+    }
+  },
+  {
+    "id": "20261007090445_4aa8f705",
+    "title": "Spotify expands audiobooks to over 180 markets",
+    "url": "https://techcrunch.com/2026/10/07/spotify-expands-audiobooks-to-over-180-markets/",
+    "category": "Entertainment",
+    "fingerprint": "4aa8f705b440bf",
+    "sources": [
+      "Hollywood Reporter",
+      "TechCrunch"
+    ],
+    "score": 51.3,
+    "breaking": false,
+    "mode": "cache",
+    "slot": null,
+    "caption_len": 889,
+    "published_at": "2026-10-07T09:04:45.400761+00:00",
+    "format": "reel",
+    "reel": "voice=True footage=pixabay +photos",
+    "articles": [
+      {
+        "url": "https://techcrunch.com/2026/10/07/spotify-expands-audiobooks-to-over-180-markets/",
+        "title": "Spotify expands audiobooks to over 180 markets"
+      },
+      {
+        "url": "https://www.hollywoodreporter.com/business/digital/spotify-audiobooks-2-1236723507/",
+        "title": "Spotify to Expand Audiobooks Offering to More Than 180 Markets"
+      }
+    ],
+    "media_id": "18199960603347337",
+    "permalink": "https://www.instagram.com/reel/DeMAS0YknxI/",
+    "insights": {
+      "reach": 0,
+      "saved": 0,
+      "shares": 0,
+      "likes": 0,
+      "comments": 0,
+      "total_interactions": 0
+    }
+  },
+  {
+    "id": "20261007193352_f79760e3",
+    "title": "Microsoft brings more AI to PCs as it challenges Apple",
+    "url": "https://economictimes.indiatimes.com/tech/artificial-intelligence/microsoft-brings-more-ai-to-pcs-as-it-challenges-apple/articleshow/134773844.cms",
+    "category": "Technology",
+    "fingerprint": "f79760e3356227",
+    "sources": [
+      "Economic Times Tech"
+    ],
+    "score": 65.8,
+    "breaking": false,
+    "mode": "ai",
+    "slot": null,
+    "caption_len": 950,
+    "published_at": "2026-10-07T19:33:52.424479+00:00",
+    "format": "reel",
+    "reel": "voice=True footage=pixabay +photos",
+    "articles": [
+      {
+        "url": "https://economictimes.indiatimes.com/tech/artificial-intelligence/microsoft-brings-more-ai-to-pcs-as-it-challenges-apple/articleshow/134773844.cms",
+        "title": "Microsoft brings more AI to PCs as it challenges Apple"
+      }
+    ],
+    "media_id": "17901792615369616",
+    "permalink": "https://www.instagram.com/reel/DeNH9W5jjBa/",
+    "insights": {
+      "reach": 15,
+      "saved": 0,
+      "shares": 0,
+      "likes": 0,
+      "comments": 0,
+      "total_interactions": 0
+    }
+  },
+  {
+    "id": "20261008102305_76497670",
+    "title": "Clubs fear political interference in Man City appeal",
+    "url": "https://www.bbc.co.uk/sport/football/articles/c6y93qq5175wo?at_medium=RSS&at_campaign=rss",
+    "category": "News",
+    "fingerprint": "764976701faac9",
+    "sources": [
+      "BBC News"
+    ],
+    "score": 62.8,
+    "breaking": false,
+    "mode": "ai",
+    "slot": null,
+    "caption_len": 820,
+    "published_at": "2026-10-08T10:23:05.976183+00:00",
+    "format": "reel",
+    "reel": "voice=True footage=pixabay +photos",
+    "articles": [
+      {
+        "url": "https://www.bbc.co.uk/sport/football/articles/c6y93qq5175wo?at_medium=RSS&at_campaign=rss",
+        "title": "Clubs fear political interference in Man City appeal"
+      }
+    ],
+    "facebook": null,
+    "media_id": "18107674967185067",
+    "permalink": "https://www.instagram.com/reel/DeOt-OaDNoy/",
+    "insights": {
+      "reach": 7,
+      "saved": 0,
+      "shares": 0,
+      "likes": 1,
+      "comments": 0,
+      "total_interactions": 1
+    }
+  },
+  {
+    "id": "20261008135434_a7a196ad",
+    "title": "GST Council scraps arrest powers of GST officers, ups prosecution threshold to ₹5 crore",
+    "url": "https://www.thehindu.com/business/Economy/gst-council-scraps-arrest-powers-of-gst-officers-ups-prosecution-threshold-to-5-crore/article71559868.ece",
+    "category": "News",
+    "fingerprint": "a7a196ad6482fe",
+    "sources": [
+      "NDTV News",
+      "The Hindu",
+      "Times of India"
+    ],
+    "score": 64.5,
+    "breaking": false,
+    "mode": "ai",
+    "slot": "2026-10-08 18:00",
+    "caption_len": 1267,
+    "published_at": "2026-10-08T13:54:34.290154+00:00",
+    "format": "reel",
+    "reel": "voice=True footage=pixabay +photos",
+    "articles": [
+      {
+        "url": "https://www.thehindu.com/business/Economy/gst-council-scraps-arrest-powers-of-gst-officers-ups-prosecution-threshold-to-5-crore/article71559868.ece",
+        "title": "GST Council scraps arrest powers of GST officers, ups prosecution threshold to ₹5 crore"
+      },
+      {
+        "url": "https://www.ndtv.com/india-news/in-major-reform-gst-council-scraps-tax-officers-arrest-powers-12156724#publisher=newsstand",
+        "title": "In Major Reform, GST Council Scraps Tax Officers' Arrest Powers"
+      },
+      {
+        "url": "https://timesofindia.indiatimes.com/business/india-business/gst-council-meeting-arresting-powers-of-tax-officers-scrapped-prosecution-threshold-raised-to-rs-5-crore/articleshow/134789551.cms",
+        "title": "GST Council scraps tax officers' arrest powers; prosecution threshold raised to Rs 5 cr"
+      }
+    ],
+    "facebook": null,
+    "media_id": "18109019957229235",
+    "permalink": "https://www.instagram.com/reel/DePHbIpAdTL/",
+    "insights": {
+      "reach": 114,
+      "saved": 0,
+      "shares": 0,
+      "likes": 0,
+      "comments": 0,
+      "total_interactions": 0
+    }
+  },
+  {
+    "id": "20261009005101_6fef5eba",
+    "title": "Can West Indies find a way to halt India's home juggernaut?",
+    "url": "https://www.cricinfo.com/ci/content/story/1557628.html?ex_cid=OTC-RSS",
+    "category": "Sports",
+    "fingerprint": "6fef5ebacaa700",
+    "sources": [
+      "ESPN Cricinfo"
+    ],
+    "score": 52.3,
+    "breaking": false,
+    "mode": "cache",
+    "slot": null,
+    "caption_len": 1105,
+    "published_at": "2026-10-09T00:51:01.103082+00:00",
+    "format": "reel",
+    "reel": "voice=True footage=pixabay +photos",
+    "articles": [
+      {
+        "url": "https://www.cricinfo.com/ci/content/story/1557628.html?ex_cid=OTC-RSS",
+        "title": "Can West Indies find a way to halt India's home juggernaut?"
+      }
+    ],
+    "facebook": null,
+    "media_id": "18149913832478196",
+    "permalink": "https://www.instagram.com/reel/DeQRJ54iR4e/",
+    "insights": {
+      "reach": 64,
+      "saved": 0,
+      "shares": 0,
+      "likes": 0,
+      "comments": 0,
+      "total_interactions": 0
+    }
+  },
+  {
+    "id": "20261009194120_405749a4",
+    "title": "Black Bear Acquires Rom-Com ‘Honeymoon / Funeral’ Starring Rebecca Ferguson, Greta Lee and Carrie Coon",
+    "url": "https://variety.com/2026/film/news/black-bear-honeymoon-funeral-rebecca-ferguson-greta-lee-1236906791/",
+    "category": "Entertainment",
+    "fingerprint": "405749a4981365",
+    "sources": [
+      "Hollywood Reporter",
+      "Variety"
+    ],
+    "score": 60.0,
+    "breaking": false,
+    "mode": "ai",
+    "slot": null,
+    "caption_len": 985,
+    "published_at": "2026-10-09T19:41:20.634033+00:00",
+    "format": "reel",
+    "reel": "voice=True footage=pixabay +photos",
+    "articles": [
+      {
+        "url": "https://variety.com/2026/film/news/black-bear-honeymoon-funeral-rebecca-ferguson-greta-lee-1236906791/",
+        "title": "Black Bear Acquires Rom-Com ‘Honeymoon / Funeral’ Starring Rebecca Ferguson, Greta Lee and Carrie Coon"
+      },
+      {
+        "url": "https://www.hollywoodreporter.com/movies/movie-news/rebecca-ferguson-greta-lee-honeymoon-funeral-black-bear-1236726324/",
+        "title": "Rebecca Ferguson, Greta Lee’s MRC Rom-Com ‘Honeymoon / Funeral’ Goes to Black Bear"
+      }
+    ],
+    "facebook": {
+      "error": "FacebookError: (#200) Subject does not have permission to post videos on this target"
+    },
+    "media_id": "17882243505626672",
+    "permalink": "https://www.instagram.com/reel/DeSSek9gBi2/"
+  },
+  {
+    "id": "20261009200840_6fc852cc",
+    "title": "Opposition targets Modi government over ‘undeclared emergency’ in Delhi ahead of youth protest",
+    "url": "https://www.thehindu.com/news/national/opposition-targets-modi-government-over-undeclared-emergency-in-delhi-ahead-of-youth-protest/article71565248.ece",
+    "category": "News",
+    "fingerprint": "6fc852cc9618e0",
+    "sources": [
+      "The Hindu"
+    ],
+    "score": 60.2,
+    "breaking": false,
+    "mode": "ai",
+    "slot": null,
+    "caption_len": 866,
+    "published_at": "2026-10-09T20:08:40.674070+00:00",
+    "format": "reel",
+    "reel": "voice=True footage=pixabay +photos",
+    "articles": [
+      {
+        "url": "https://www.thehindu.com/news/national/opposition-targets-modi-government-over-undeclared-emergency-in-delhi-ahead-of-youth-protest/article71565248.ece",
+        "title": "Opposition targets Modi government over ‘undeclared emergency’ in Delhi ahead of youth protest"
+      }
+    ],
+    "facebook": {
+      "error": "FacebookError: (#200) Subject does not have permission to post videos on this target"
+    },
+    "media_id": "17961222168228399",
+    "permalink": "https://www.instagram.com/reel/DeSVivKgdIG/",
+    "insights": {
+      "reach": 35,
+      "saved": 0,
+      "shares": 0,
+      "likes": 0,
+      "comments": 0,
+      "total_interactions": 0
+    }
+  },
+  {
+    "id": "20261009203205_45f6727f",
+    "title": "Tesla’s ‘Full Self-Driving’ Becomes ‘Assisted Driving’ in Europe",
+    "url": "https://www.wired.com/story/tesla-full-self-driving-becomes-assisted-driving-in-europe/",
+    "category": "Technology",
+    "fingerprint": "45f6727fc8a7a8",
+    "sources": [
+      "TechCrunch",
+      "Wired"
+    ],
+    "score": 56.8,
+    "breaking": false,
+    "mode": "ai",
+    "slot": null,
+    "caption_len": 964,
+    "published_at": "2026-10-09T20:32:05.645368+00:00",
+    "format": "reel",
+    "reel": "voice=True footage=pixabay +photos look=Neerja/accent/left/punchy",
+    "articles": [
+      {
+        "url": "https://www.wired.com/story/tesla-full-self-driving-becomes-assisted-driving-in-europe/",
+        "title": "Tesla’s ‘Full Self-Driving’ Becomes ‘Assisted Driving’ in Europe"
+      },
+      {
+        "url": "https://techcrunch.com/2026/10/09/tesla-renames-full-self-driving-to-tesla-assisted-driving-in-europe/",
+        "title": "Tesla renames ‘Full Self-Driving’ to ‘Tesla Assisted Driving’ in Europe"
+      }
+    ],
+    "facebook": {
+      "error": "FacebookError: (#200) Subject does not have permission to post videos on this target | FacebookError: (#200) If posting to a group, requires app being installed in the group, and \\\n          either publish_to_groups permission with user token, or both pages_read_engagement \\\n          a",
+      "fallback": "link"
+    },
+    "media_id": "18124658072308444",
+    "permalink": "https://www.instagram.com/reel/DeSYNrDkgmQ/",
+    "insights": {
+      "reach": 104,
+      "saved": 0,
+      "shares": 0,
+      "likes": 1,
+      "comments": 0,
+      "total_interactions": 1
+    }
+  },
+  {
+    "id": "20261010011214_7a6a8e24",
+    "title": "Panama President Declares \"Major Disaster\" After Earthquake",
+    "url": "https://www.ndtv.com/world-news/panama-president-declares-major-disaster-after-earthquake-12164373#publisher=newsstand",
+    "category": "News",
+    "fingerprint": "7a6a8e24e2bd13",
+    "sources": [
+      "NDTV News"
+    ],
+    "score": 58.2,
+    "breaking": false,
+    "mode": "ai",
+    "slot": null,
+    "caption_len": 925,
+    "published_at": "2026-10-10T01:12:14.055164+00:00",
+    "format": "reel",
+    "reel": "voice=True footage=pixabay +photos look=Neerja/yellow/center/vignette",
+    "articles": [
+      {
+        "url": "https://www.ndtv.com/world-news/panama-president-declares-major-disaster-after-earthquake-12164373#publisher=newsstand",
+        "title": "Panama President Declares \"Major Disaster\" After Earthquake"
+      }
+    ],
+    "facebook": {
+      "crosspost": "https://www.facebook.com/reel/968793065650580"
+    },
+    "media_id": "18373716028208353",
+    "permalink": "https://www.instagram.com/reel/DeS4WsDCouX/",
+    "insights": {
+      "reach": 102,
+      "saved": 0,
+      "shares": 0,
+      "likes": 0,
+      "comments": 0,
+      "total_interactions": 0
+    }
+  },
+  {
+    "id": "20261010013941_5e551389",
+    "title": "Commentator Katie Zacharia picked as new White House press secretary",
+    "url": "https://www.bbc.co.uk/news/articles/c5rmy73zr0rro?at_medium=RSS&at_campaign=rss",
+    "category": "News",
+    "fingerprint": "5e55138984616a",
+    "sources": [
+      "BBC News",
+      "NDTV News"
+    ],
+    "score": 53.0,
+    "breaking": false,
+    "mode": "cache",
+    "slot": null,
+    "caption_len": 942,
+    "published_at": "2026-10-10T01:39:41.191607+00:00",
+    "format": "reel",
+    "reel": "voice=True footage=pixabay +photos look=Neerja/lime/box/vivid",
+    "articles": [
+      {
+        "url": "https://www.bbc.co.uk/news/articles/c5rmy73zr0rro?at_medium=RSS&at_campaign=rss",
+        "title": "Commentator Katie Zacharia picked as new White House press secretary"
+      },
+      {
+        "url": "https://www.ndtv.com/world-news/trump-picks-katie-zacharia-as-new-white-house-press-secretary-12164006#publisher=newsstand",
+        "title": "Trump Picks Katie Zacharia As New White House Press Secretary"
+      }
+    ],
+    "facebook": {
+      "crosspost": "https://www.facebook.com/reel/28500644536259945"
+    },
+    "media_id": "17911797090471614",
+    "permalink": "https://www.instagram.com/reel/DeS7WZQEVDw/",
+    "insights": {
+      "reach": 22,
+      "saved": 0,
+      "shares": 0,
+      "likes": 0,
+      "comments": 0,
+      "total_interactions": 0
+    }
+  },
+  {
+    "id": "20261010190013_0094cde9",
+    "title": "Here’s How to Watch WWE Money in the Bank 2026 Live Online",
+    "url": "https://variety.com/2026/shopping/news/how-to-watch-wwe-money-in-the-bank-2026-live-online-free-1236905627/",
+    "category": "Entertainment",
+    "fingerprint": "0094cde90be2de",
+    "sources": [
+      "Times of India",
+      "Variety"
+    ],
+    "score": 59.1,
+    "breaking": false,
+    "mode": "ai",
+    "slot": null,
+    "caption_len": 943,
+    "published_at": "2026-10-10T19:00:13.522111+00:00",
+    "format": "reel",
+    "reel": "voice=True footage=pixabay +photos look=Neerja/cyan/left/cool",
+    "articles": [
+      {
+        "url": "https://variety.com/2026/shopping/news/how-to-watch-wwe-money-in-the-bank-2026-live-online-free-1236905627/",
+        "title": "Here’s How to Watch WWE Money in the Bank 2026 Live Online"
+      },
+      {
+        "url": "https://timesofindia.indiatimes.com/sports/wwe/top-stories/wwe-money-in-the-bank-2026-all-confirmed-matches-main-event-start-timings-how-to-watch-and-more/articleshow/134849849.cms",
+        "title": "WWE Money in the Bank 2026: Confirmed matches, start time and how to watch"
+      }
+    ],
+    "facebook": {
+      "crosspost": "https://www.facebook.com/reel/1116390297567533"
+    },
+    "media_id": "18118199944779757",
+    "permalink": "https://www.instagram.com/reel/DeUzP-NDc-e/",
+    "insights": {
+      "reach": 7,
+      "saved": 0,
+      "shares": 0,
+      "likes": 1,
+      "comments": 0,
+      "total_interactions": 1
+    }
+  },
+  {
+    "id": "20261012042213_01b7a81f",
+    "title": "Heavy rain, thunderstorms lash Delhi; IMD issues 'red' alert",
+    "url": "https://www.thehindu.com/news/cities/Delhi/heavy-rain-thunderstorms-lash-delhi-imd-issues-red-alert/article71573688.ece",
+    "category": "News",
+    "fingerprint": "01b7a81feeb278",
+    "sources": [
+      "NDTV News",
+      "The Hindu",
+      "Times of India"
+    ],
+    "score": 61.3,
+    "breaking": false,
+    "mode": "ai",
+    "slot": "2026-10-12 09:00",
+    "caption_len": 1047,
+    "published_at": "2026-10-12T04:22:13.625032+00:00",
+    "format": "reel",
+    "reel": "voice=True footage=pixabay +photos look=Neerja/yellow/center/punchy",
+    "articles": [
+      {
+        "url": "https://www.thehindu.com/news/cities/Delhi/heavy-rain-thunderstorms-lash-delhi-imd-issues-red-alert/article71573688.ece",
+        "title": "Heavy rain, thunderstorms lash Delhi; IMD issues 'red' alert"
+      },
+      {
+        "url": "https://www.ndtv.com/delhi-news/delhi-rain-delhi-weather-delhi-ncr-wakes-up-to-heavy-rain-thunderstorms-waterlogging-in-many-areas-12171554#publisher=newsstand",
+        "title": "Delhi-NCR Wakes Up To Heavy Rain, Thunderstorms, Waterlogging In Many Areas"
+      },
+      {
+        "url": "https://timesofindia.indiatimes.com/city/delhi/delhi-ncr-wakes-up-to-heavy-rain-thunderstorms-waterlogging-reported-in-several-areas/articleshow/134880201.cms",
+        "title": "Delhi-NCR wakes up to heavy rain, thunderstorms as IMD issues red alert"
+      }
+    ],
+    "facebook": {
+      "crosspost": "https://www.facebook.com/reel/1086589513985833"
+    },
+    "media_id": "18164800402472680",
+    "permalink": "https://www.instagram.com/reel/DeYXukSADCV/"
   }
 ]
