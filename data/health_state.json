@@ -1,9 +1,9 @@
 {
-  "status": "ONLINE",
-  "consecutive_failures": 0,
+  "status": "DEGRADED",
+  "consecutive_failures": 1,
   "last_success": "2026-10-12T04:26:59.302911+00:00",
-  "last_failure": null,
-  "last_error": null,
+  "last_failure": "2026-11-05T22:07:37.413449+00:00",
+  "last_error": "Instagram token invalid/expired: 17841439019615204/content_publishing_limit: Invalid OAuth access token - Cannot parse access token",
   "paused_until": null,
   "last_alert": null
 }
