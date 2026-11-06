@@ -855,5 +855,52 @@
     },
     "media_id": "18164800402472680",
     "permalink": "https://www.instagram.com/reel/DeYXukSADCV/"
+  },
+  {
+    "id": "20261106072543_d86f6887",
+    "title": "Paraguay President Santiago Peña resigns after bank collapse",
+    "url": "https://www.bbc.co.uk/news/articles/c6p9g39vln3yo?at_medium=RSS&at_campaign=rss",
+    "category": "News",
+    "fingerprint": "d86f68871edb08",
+    "sources": [
+      "Al Jazeera",
+      "BBC World",
+      "The Hindu BusinessLine",
+      "Times of India"
+    ],
+    "score": 79.2,
+    "breaking": false,
+    "mode": "fallback",
+    "slot": null,
+    "caption_len": 699,
+    "published_at": "2026-11-06T07:25:43.354620+00:00",
+    "format": "reel",
+    "reel": "voice=False footage=commons +photos look=Prabhat/accent/box/warm",
+    "media_use": "file_photo",
+    "decision": "operator forced a Reel",
+    "articles": [
+      {
+        "url": "https://www.bbc.co.uk/news/articles/c6p9g39vln3yo?at_medium=RSS&at_campaign=rss",
+        "title": "Paraguay President Santiago Peña resigns after bank collapse"
+      },
+      {
+        "url": "https://www.aljazeera.com/video/newsfeed/2026/11/6/paraguays-president-impeached-amid-bank-collapse-crisis?traffic_source=rss",
+        "title": "Paraguay’s president impeached amid bank collapse crisis"
+      },
+      {
+        "url": "https://www.thehindubusinessline.com/news/world/paraguay-president-santiago-pena-resigns-amid-ueno-bank-collapse/article71671388.ece",
+        "title": "Paraguay President Santiago Peña resigns amid ueno bank collapse"
+      },
+      {
+        "url": "https://timesofindia.indiatimes.com/world/rest-of-world/paraguay-president-santiago-pea-resigns-amid-ueno-bank-collapse-faces-impeachment/articleshow/135585738.cms",
+        "title": "Paraguay president Santiago Peña resigns amid Ueno Bank collapse, faces impeachment"
+      }
+    ],
+    "media_types": [
+      "video/mp4"
+    ],
+    "facebook": null,
+    "media_id": "18082413893737938",
+    "permalink": "https://www.instagram.com/reel/DfZEdU4j5_x/"
   }
 ]

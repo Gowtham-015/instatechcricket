@@ -1,5 +1,23 @@
 [
   {
+    "name": "Prabhat/accent/box/warm",
+    "voice": "en-IN-PrabhatNeural",
+    "rate": "+13%",
+    "pitch": "+0Hz",
+    "highlight": "accent",
+    "caption_pos": "low",
+    "caption_size": 112,
+    "caption_words": 2,
+    "caption_upper": true,
+    "hook_layout": "box",
+    "hook_pos": "mid",
+    "hook_anim": "rise",
+    "grade": "warm",
+    "outro": 1,
+    "pan_flip": true,
+    "opener": 4
+  },
+  {
     "name": "Neerja/yellow/center/punchy",
     "voice": "en-IN-NeerjaNeural",
     "rate": "+10%",
