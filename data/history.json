@@ -944,5 +944,37 @@
     "facebook": null,
     "media_id": "18133012753744960",
     "permalink": "https://www.instagram.com/p/DfZZhW5lbK7/"
+  },
+  {
+    "id": "20261106103440_be4d5fe6",
+    "title": "Palo Alto Networks in talks to buy AI agent security startup Clutch for $500M",
+    "url": "https://techcrunch.com/2026/11/05/palo-alto-networks-in-talks-to-buy-ai-agent-security-startup-clutch-for-500m/",
+    "category": "Technology",
+    "fingerprint": "be4d5fe6daed3e",
+    "sources": [
+      "TechCrunch"
+    ],
+    "score": 66.7,
+    "breaking": false,
+    "mode": "fallback",
+    "slot": null,
+    "caption_len": 423,
+    "published_at": "2026-11-06T10:34:40.246816+00:00",
+    "format": "reel",
+    "reel": "voice=True footage=commons +photos look=Neerja/pink/left/cool",
+    "media_use": "file_photo",
+    "decision": "operator forced a Reel",
+    "articles": [
+      {
+        "url": "https://techcrunch.com/2026/11/05/palo-alto-networks-in-talks-to-buy-ai-agent-security-startup-clutch-for-500m/",
+        "title": "Palo Alto Networks in talks to buy AI agent security startup Clutch for $500M"
+      }
+    ],
+    "media_types": [
+      "video/mp4"
+    ],
+    "facebook": null,
+    "media_id": "17943512841382860",
+    "permalink": "https://www.instagram.com/reel/DfZaG27DnLO/"
   }
 ]
