@@ -67,7 +67,7 @@ jobs:
           FB_MODE: ${{ vars.FB_MODE || 'crosspost' }}
           MEDIA_HOST: ${{ vars.MEDIA_HOST || 'cloudinary' }}
           BRAND_NAME: ${{ vars.BRAND_NAME || 'Daily Pulse' }}
-          ACCOUNT_HANDLE: ${{ vars.ACCOUNT_HANDLE || '@yourhandle' }}
+          ACCOUNT_HANDLE: ${{ vars.ACCOUNT_HANDLE || '@techcrickethub' }}
           BRAND_HASHTAGS: ${{ vars.BRAND_HASHTAGS }}
           POST_TIMES: ${{ vars.POST_TIMES || '09:00,13:00,18:00,21:00' }}
           MAX_POSTS_PER_DAY: ${{ vars.MAX_POSTS_PER_DAY || '6' }}
