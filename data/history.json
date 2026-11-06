@@ -902,5 +902,47 @@
     "facebook": null,
     "media_id": "18082413893737938",
     "permalink": "https://www.instagram.com/reel/DfZEdU4j5_x/"
+  },
+  {
+    "id": "20261106103135_c2bdf601",
+    "title": "Trump signs order to preserve Oval Office as national monument",
+    "url": "https://www.bbc.co.uk/news/articles/cmy0eeg101djo?at_medium=RSS&at_campaign=rss",
+    "category": "News",
+    "fingerprint": "c2bdf601260846",
+    "sources": [
+      "Al Jazeera",
+      "BBC News",
+      "The Hindu International"
+    ],
+    "score": 83.7,
+    "breaking": false,
+    "mode": "ai",
+    "slot": null,
+    "caption_len": 712,
+    "published_at": "2026-11-06T10:31:35.570019+00:00",
+    "format": "photo",
+    "reel": "",
+    "media_use": "file_photo",
+    "decision": "relevant file photo available (labelled as such); original video unavailable; narration unnecessary",
+    "articles": [
+      {
+        "url": "https://www.bbc.co.uk/news/articles/cmy0eeg101djo?at_medium=RSS&at_campaign=rss",
+        "title": "Trump signs order to preserve Oval Office as national monument"
+      },
+      {
+        "url": "https://www.thehindu.com/news/international/trump-designates-oval-office-as-national-monument/article71671751.ece",
+        "title": "Trump designates Oval Office as national monument"
+      },
+      {
+        "url": "https://www.aljazeera.com/news/2026/11/6/trump-issues-proclamation-declaring-oval-office-national-monument?traffic_source=rss",
+        "title": "Trump issues proclamation declaring Oval Office national monument"
+      }
+    ],
+    "media_types": [
+      "image/jpeg"
+    ],
+    "facebook": null,
+    "media_id": "18133012753744960",
+    "permalink": "https://www.instagram.com/p/DfZZhW5lbK7/"
   }
 ]
