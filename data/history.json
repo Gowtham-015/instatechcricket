@@ -976,5 +976,42 @@
     "facebook": null,
     "media_id": "17943512841382860",
     "permalink": "https://www.instagram.com/reel/DfZaG27DnLO/"
+  },
+  {
+    "id": "20261106104753_165ec3cf",
+    "title": "IAF hands over 39.5-acre sports complex land to Centre",
+    "url": "https://www.thehindu.com/news/cities/Delhi/iaf-hands-over-395-acre-sports-complex-land-to-centre/article71673859.ece",
+    "category": "Business",
+    "fingerprint": "165ec3cf4a3127",
+    "sources": [
+      "The Hindu",
+      "The Hindu BusinessLine"
+    ],
+    "score": 71.9,
+    "breaking": false,
+    "mode": "ai",
+    "slot": null,
+    "caption_len": 647,
+    "published_at": "2026-11-06T10:47:53.277784+00:00",
+    "format": "photo",
+    "reel": "",
+    "media_use": "file_photo",
+    "decision": "relevant file photo available (labelled as such); original video unavailable; narration unnecessary",
+    "articles": [
+      {
+        "url": "https://www.thehindu.com/news/cities/Delhi/iaf-hands-over-395-acre-sports-complex-land-to-centre/article71673859.ece",
+        "title": "IAF hands over 39.5-acre sports complex land to Centre"
+      },
+      {
+        "url": "https://www.thehindubusinessline.com/news/iaf-hands-over-395-acre-sports-complex-land-to-centre/article71673706.ece",
+        "title": "IAF hands over 39.5-acre sports complex land to Centre"
+      }
+    ],
+    "media_types": [
+      "image/jpeg"
+    ],
+    "facebook": null,
+    "media_id": "18084535403711367",
+    "permalink": "https://www.instagram.com/p/DfZbcQMIPiD/"
   }
 ]
