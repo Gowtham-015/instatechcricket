@@ -1013,5 +1013,52 @@
     "facebook": null,
     "media_id": "18084535403711367",
     "permalink": "https://www.instagram.com/p/DfZbcQMIPiD/"
+  },
+  {
+    "id": "20261106205741_8b885a6b",
+    "title": "Trump replaces Susie Wiles with Stephen Miller as chief of staff after GOP’s midterm defeat",
+    "url": "https://www.thehindu.com/news/international/trump-replaces-susie-wiles-with-stephen-miller-as-chief-of-staff-after-gops-midterm-defeat/article71676063.ece",
+    "category": "News",
+    "fingerprint": "8b885a6bc7af59",
+    "sources": [
+      "Al Jazeera",
+      "NDTV News",
+      "The Hindu International",
+      "Times of India"
+    ],
+    "score": 86.0,
+    "breaking": true,
+    "mode": "ai",
+    "slot": null,
+    "caption_len": 580,
+    "published_at": "2026-11-06T20:57:41.594443+00:00",
+    "format": "photo",
+    "reel": "",
+    "media_use": "file_photo",
+    "decision": "relevant file photo available (labelled as such); original video unavailable; narration unnecessary",
+    "articles": [
+      {
+        "url": "https://www.thehindu.com/news/international/trump-replaces-susie-wiles-with-stephen-miller-as-chief-of-staff-after-gops-midterm-defeat/article71676063.ece",
+        "title": "Trump replaces Susie Wiles with Stephen Miller as chief of staff after GOP’s midterm defeat"
+      },
+      {
+        "url": "https://www.ndtv.com/world-news/after-midterm-rout-trump-announces-stephen-miller-as-new-chief-of-staff-12294804#publisher=newsstand",
+        "title": "After Midterm Rout, Trump Announces Stephen Miller As New Chief Of Staff"
+      },
+      {
+        "url": "https://www.aljazeera.com/news/2026/11/6/trump-says-making-adviser-stephen-miller-white-house-chief-of-staff?traffic_source=rss",
+        "title": "Trump names Stephen Miller as new chief of staff, replacing Susie Wiles"
+      },
+      {
+        "url": "https://timesofindia.indiatimes.com/world/us/trump-appoints-stephen-trump-appoints-stephen-miller-as-chief-of-staff-after-gops-midterm-defeat-replaces-susie-wilesmiller-as-chief-of-staff-after-gops-midterm-defeat-sacks-susie-wiles/articleshow/135619116.cms",
+        "title": "Trump names Stephen Miller chief of staff after midterm losses, replaces Susie Wiles"
+      }
+    ],
+    "media_types": [
+      "image/jpeg"
+    ],
+    "facebook": null,
+    "media_id": "18452075197124395",
+    "permalink": "https://www.instagram.com/p/DfahK7FGPj5/"
   }
 ]
