@@ -4,8 +4,8 @@ Providers (TTS_PROVIDER=auto tries them in this order, anything failing falls th
   edge   : Microsoft Edge neural voices via the `edge-tts` package. Free, no key, gives word timings.
            (Unofficial endpoint of the Edge browser's read-aloud feature - it can change without notice.)
   gemini : Gemini TTS with your existing GEMINI_API_KEY (official, subject to your quota).
-  none   : no voice; the video is then captioned at reading speed.
-A failed voice NEVER fails the post: synthesize() returns None and the Reel is built without narration.
+    none   : disabled; Reel publishing is rejected or falls back to a still format.
+A failed voice returns None; the pipeline then avoids publishing a Reel and selects a still format when possible.
 """
 from __future__ import annotations
 
@@ -195,5 +195,5 @@ def synthesize(text: str, out_dir: Path, provider: str | None = None, voice: str
                 return vo
         except Exception as e:  # noqa: BLE001 - voice problems must never fail a post
             log.warning("TTS provider %s failed: %s: %s", name, type(e).__name__, mask_secrets(str(e))[:160])
-    log.warning("No voiceover available -> captions at reading speed")
+    log.warning("No voiceover available")
     return None

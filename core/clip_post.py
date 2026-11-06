@@ -1,7 +1,7 @@
 """Publish a clip YOU supply (official footage you have permission/licence to use) as a Reel.
 
 The agent does everything around the clip: reformats it to 9:16 (blurred fill so nothing is cropped away),
-keeps the ORIGINAL audio (crowd, commentary, celebrations), adds a hook headline and a visible credit line,
+mixes generated narration with any ORIGINAL audio, adds a hook headline and a visible credit line,
 writes a fact-grounded caption from real news, and publishes it.
 
 It never downloads other people's videos. Rights are the operator's responsibility: --credit and
@@ -19,7 +19,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-from . import config
+from . import config, reel_studio
 from .ai_writer import compose_caption
 from .dedupe import jaccard, tokens
 from .image_renderer import clean_for_image, fit_text
@@ -162,7 +162,19 @@ def post_clip(pipeline, *, video: Path, topic: str, credit: str, notes: str = ""
         content, mode = pipeline.writer.write(cluster)
         caption = compose_caption(content, cluster, credit)
         stem = f"{now.strftime('%Y%m%d%H%M%S')}_clip_{cluster['fingerprint'][:6]}"
-        mp4 = prepare_clip(video, tmp / f"{stem}.mp4", cluster=cluster, hook=content["hook"], credit=credit)
+        try:
+            voice_content, voice_mode = pipeline.writer.write_reel(cluster)
+            pipeline._warn_if_fallback(voice_mode)
+            voice = reel_studio.synthesize(reel_studio.narration_text(voice_content), tmp)
+            reel_studio.validate_voiceover(voice)
+        except Exception as e:  # noqa: BLE001 - custom clips are rejected rather than published without narration
+            raise ClipError(f"cannot publish this Reel without valid generated narration: {type(e).__name__}: {e}") from e
+        try:
+            base_video = prepare_clip(video, tmp / f"{stem}_base.mp4", cluster=cluster, hook=content["hook"], credit=credit)
+            mp4 = reel_studio.mux_voiceover(base_video, voice, tmp / f"{stem}.mp4")
+            reel_studio.validate_reel_result(reel_studio.ReelResult(mp4, True, "operator_clip", voice.duration))
+        except Exception as e:  # noqa: BLE001 - never upload a clip whose narration mix is invalid
+            raise ClipError(f"could not build a narrated Reel: {type(e).__name__}: {e}") from e
         record = {"id": stem, "title": cluster["lead"]["title"], "url": cluster["lead"].get("url", ""),
                   "category": cluster["category"], "fingerprint": cluster["fingerprint"], "sources": cluster["sources"],
                   "score": cluster["score"], "breaking": False, "mode": mode, "slot": None, "format": "reel",

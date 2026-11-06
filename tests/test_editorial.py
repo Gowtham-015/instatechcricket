@@ -209,7 +209,8 @@ class Env(unittest.TestCase):
                                 MEDIA_SOURCE_ORDER=["official", "commons"], MEDIA_MIN_WIDTH=1000, MEDIA_MIN_HEIGHT=600,
                                 MEDIA_MIN_CONFIDENCE=0.6, ALLOW_FILE_PHOTOS=True, PHOTO_DIR="", VIDEO_DIR="",
                                 TRENDS_ENABLED=False, MIN_SOURCES=1, ACCOUNT_HANDLE="@dailypulse", BRAND_NAME="Daily Pulse",
-                                ALERT_WEBHOOK_URL="", TTS_PROVIDER="none", REEL_STYLE="dynamic", REEL_VARIETY=False,
+                                ALERT_WEBHOOK_URL="", TTS_PROVIDER="edge", REEL_VOICEOVER="always",
+                                REEL_STYLE="dynamic", REEL_VARIETY=False,
                                 MUSIC_PATH="", FB_PAGE_ID="", FB_PAGE_ACCESS_TOKEN="", PEXELS_API_KEY="", PIXABAY_API_KEY="")
         p.start()
         self.addCleanup(p.stop)
@@ -719,14 +720,14 @@ class FakeRetriever:
         return self.build(Path(work_dir))
 
 
-def photos_plan(n=1, *, role="event", video=False, conf=0.9, clips=0):
+def photos_plan(n=1, *, role="event", video=False, video_audio=True, conf=0.9, clips=0):
     def build(work: Path) -> MediaPlan:
         photos = [asset(title=f"Photo {i}", role=role, conf=conf, path=str(make_jpg(work / f"p{i}.jpg", 100 + i)))
                   for i in range(n)]
         videos = []
         if video:
-            mp4 = make_mp4(work, "src.mp4")
-            videos = [asset("video", role="event", duration=4, audio=True, permission="official_permitted", path=str(mp4),
+            mp4 = make_mp4(work, "src.mp4", audio=video_audio)
+            videos = [asset("video", role="event", duration=4, audio=video_audio, permission="official_permitted", path=str(mp4),
                             width=640, height=480)]
         return MediaPlan("s", photos=photos, videos=videos, illustrative_clips=clips)
     return build
@@ -745,7 +746,8 @@ class EditorialPipeline(PipelineFixture, Env):
             if fail:
                 raise video_renderer.VideoError("render exploded")
             subprocess.run([video_renderer.find_ffmpeg(), "-y", "-loglevel", "error", "-f", "lavfi", "-i",
-                            "testsrc2=s=320x568:r=30:d=4", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(out_path)], check=True)
+                            "testsrc2=s=320x568:r=30:d=4", "-f", "lavfi", "-i", "sine=frequency=200:duration=4",
+                            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(out_path)], check=True)
             from core import reel_studio
             return reel_studio.ReelResult(Path(out_path), kw.get("voiceover", False), "photos", 8.0)
         return make
@@ -810,6 +812,14 @@ class EditorialPipeline(PipelineFixture, Env):
         self.assertEqual(self.reel_calls, [])                            # the Reel renderer / TTS was never used
         self.assertIn("Original footage", (self.tmp / "preview").glob("*_caption.txt").__next__().read_text(encoding="utf-8"))
 
+    def test_n17_original_video_without_audio_gets_generated_narration(self):
+        p = self.make("final", photos_plan(video=True, video_audio=False))
+        res = p.run_cycle(dry_run=True, force=True)
+        self.assertEqual((res["status"], res["format"]), ("dry_run", "video"), res)
+        mp4 = next(Path(f) for f in res["files"] if f.endswith(".mp4"))
+        info = video_renderer.probe(mp4)
+        self.assertEqual((info["size"], info["video"], info["audio"]), ((1080, 1920), "h264", "aac"))
+
     # ---- N15 ------------------------------------------------------------------------------------------------------
     def test_n15_a_failing_preferred_format_falls_back_and_the_recorded_format_is_the_real_one(self):
         p = self.make("final", photos_plan(1))
@@ -824,6 +834,80 @@ class EditorialPipeline(PipelineFixture, Env):
         res = p.run_cycle(force=True)
         self.assertEqual((res["status"], res["format"]), ("published", "photo"), res)
         self.assertEqual(self.creates()[-1][2].get("media_type"), None)
+
+    def test_n15_missing_tts_falls_back_once_without_publishing_a_reel(self):
+        from core import reel_studio
+
+        p = self.make("explainer", photos_plan(1))
+        p.reel_maker = lambda content, cand, path, **kw: reel_studio.make_reel(
+            content, cand, path, providers=[], tts=lambda text, out_dir: None, **kw)
+        res = p.run_cycle(force=True)
+        self.assertEqual((res["status"], res["format"]), ("published", "photo"), res)
+        self.assertFalse(any(c[2].get("media_type") == "REELS" for c in self.creates()))
+        self.assertEqual(sum(c[1] == "U/media_publish" for c in self.ig_session.calls), 1)
+        self.assertEqual(len(p.load_history()), 1)
+
+    def test_n15_tts_exception_falls_back_before_any_video_upload(self):
+        from core import reel_studio
+
+        p = self.make("explainer", photos_plan(1))
+        p.reel_maker = lambda content, cand, path, **kw: reel_studio.make_reel(
+            content, cand, path, providers=[], tts=mock.Mock(side_effect=RuntimeError("TTS offline")), **kw)
+        host = p.host
+        uploaded = mock.Mock(wraps=host.upload)
+        host.upload = uploaded
+        res = p.run_cycle(force=True)
+        self.assertEqual((res["status"], res["format"]), ("published", "photo"), res)
+        self.assertEqual([Path(c.args[0]).suffix for c in uploaded.call_args_list], [".jpg"])
+        self.assertFalse(any(c[2].get("media_type") == "REELS" for c in self.creates()))
+        self.assertEqual(sum(c[1] == "U/media_publish" for c in self.ig_session.calls), 1)
+
+    def test_n15_original_video_without_narration_falls_back_before_upload(self):
+        p = self.make("final", photos_plan(video=True))
+        host = p.host
+        uploaded = mock.Mock(wraps=host.upload)
+        host.upload = uploaded
+        with mock.patch("core.reel_studio.synthesize", return_value=None):
+            res = p.run_cycle(force=True)
+        self.assertEqual((res["status"], res["format"]), ("published", "photo"), res)
+        self.assertEqual([Path(c.args[0]).suffix for c in uploaded.call_args_list], [".jpg"])
+        self.assertFalse(any(c[2].get("media_type") == "REELS" for c in self.creates()))
+        self.assertEqual(sum(c[1] == "U/media_publish" for c in self.ig_session.calls), 1)
+
+    def test_n15_silent_video_is_rejected_at_upload_boundary(self):
+        from core import reel_studio
+
+        p = self.make("explainer", photos_plan(1))
+        silent = self.tmp / "silent-upload.mp4"
+        subprocess.run([video_renderer.find_ffmpeg(), "-y", "-loglevel", "error", "-f", "lavfi", "-i",
+                        "testsrc2=s=320x568:r=10:d=4", "-f", "lavfi", "-i",
+                        "anullsrc=r=44100:cl=stereo:d=4", "-c:v", "libx264", "-c:a", "aac", str(silent)], check=True)
+        upload = mock.Mock()
+        p.host.upload = upload
+        with self.assertRaises(reel_studio.ReelVoiceoverError):
+            p._deliver(record={}, files=[silent], fmt="reel", caption="caption", content={}, cand={}, dry=False)
+        upload.assert_not_called()
+        self.assertEqual(self.ig_session.calls, [])
+
+    def test_n15_edge_voiceover_reel_publishes(self):
+        from core import reel_studio, tts
+        from core.provenance import MediaPlan
+
+        def edge(text, out_dir, **_kwargs):
+            path = Path(out_dir) / "edge.wav"
+            subprocess.run([video_renderer.find_ffmpeg(), "-y", "-loglevel", "error", "-f", "lavfi", "-i",
+                            "sine=frequency=220:duration=8", str(path)], check=True)
+            return tts.Voiceover(path, 8.0, tts.distribute_words(text, 8.0), "edge")
+
+        p = self.make("explainer", lambda work: MediaPlan("s"))
+        p._retriever = FakeRetriever(lambda work: MediaPlan("s"))
+        p.reel_maker = lambda content, cand, path, **kw: reel_studio.make_reel(
+            content, cand, path, providers=[], tts=tts.synthesize, **kw)
+        with mock.patch("core.tts._edge", side_effect=edge):
+            res = p.run_cycle(force=True, fmt="reel")
+        self.assertEqual((res["status"], res["format"]), ("published", "reel"), res)
+        self.assertTrue(any(c[2].get("media_type") == "REELS" for c in self.creates()))
+        self.assertEqual(len(p.load_history()), 1)
 
     def test_n15_media_host_failure_is_not_recorded_as_a_publication(self):
         p = self.make("final", photos_plan(1))

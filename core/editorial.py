@@ -115,19 +115,22 @@ def decide(profile, plan: MediaPlan, *, encoder_ok: bool = True, tts_ok: bool = 
     if forced and forced not in avoid:
         t.append(f"operator forced --format {forced}")
         if forced == "video" and video and encoder_ok:
-            return finish("video", "operator forced an original video and an authorised event video exists", vid=video)
+            return finish("video", "operator forced an original video and an authorised event video exists; "
+                          "generated narration is mixed in", vid=video, voice=True)
         if forced == "photo" and photos:
             return finish("photo", "operator forced a photo post", use_photos=photos[:1])
         if forced == "card":
             return finish("card", "operator forced a fact card", use_photos=[])
         if forced == "carousel":
             return finish("carousel", "operator forced a carousel", use_photos=photos[:4])
-        if forced == "reel" and encoder_ok:
+        if forced == "reel" and encoder_ok and reel_voice():
             if not photos and not illustrative_ok and profile.event_story:
                 t.append("forced Reel has no authentic visuals for an event story: building it with an animated, "
                          "clearly non-photographic background")
             return finish("reel", "operator forced a Reel", use_photos=photos[:4], voice=reel_voice(),
                           illus=illustrative_ok)
+        if forced == "reel" and not reel_voice():
+            t.append("forced Reel is unavailable because voiceover is not enabled")
         t.append(f"forced format '{forced}' is not possible with the media available: deciding automatically")
 
     # V ---------------------------------------------------------------- authorised original video
@@ -135,8 +138,8 @@ def decide(profile, plan: MediaPlan, *, encoder_ok: bool = True, tts_ok: bool = 
         t.append(f"V: authorised event video available ({video.permission}, confidence {video.confidence:.2f}, "
                  f"{video.duration:.0f}s)")
         return finish("video", "authorised event video available" + ("; original audio is preserved" if video.has_audio
-                      else "; it has no audio, so none is invented") + "; narration unnecessary",
-                      use_photos=[], vid=video)
+                      else "; it has no audio") + "; generated narration is mixed in",
+                      use_photos=[], vid=video, voice=True)
     t.append("V: no authorised video that shows this event" if not plan.videos else
              "V: video found but not usable as event footage (role/duration/permission)")
 
@@ -157,7 +160,7 @@ def decide(profile, plan: MediaPlan, *, encoder_ok: bool = True, tts_ok: bool = 
         encoder_ok = False
 
     # R before P only when narration clearly helps and visuals are authentic ------------------
-    reel_wanted = narr >= config.REEL_NARRATION_MIN and encoder_ok
+    reel_wanted = narr >= config.REEL_NARRATION_MIN and encoder_ok and reel_voice()
     reel_visuals = bool(photos) or illustrative_ok
     if reel_wanted and reel_visuals:
         t.append(f"R: narration value {narr:.2f} >= {config.REEL_NARRATION_MIN:.2f} and "

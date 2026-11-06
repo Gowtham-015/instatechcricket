@@ -131,12 +131,12 @@ Reels are built like real Reels, not info cards in a video:
 * big **word-by-word animated captions** that pop in and highlight each word as it is spoken,
 * a hook headline in the first seconds, category tag + handle, and a short "follow" outro.
 
-Setup (all optional, every step degrades gracefully):
+Setup:
 
 | Want | Do | If you skip it |
 |---|---|---|
 | Real footage | one of: free `PIXABAY_API_KEY` (<https://pixabay.com/api/docs/>), `PEXELS_API_KEY` (new keys are sometimes paused), or your own clips in `BROLL_DIR` (below) | animated moving background |
-| Voiceover | nothing: `TTS_PROVIDER=auto` uses Edge neural voices (`TTS_VOICE=en-IN-NeerjaNeural`), then Gemini TTS (`GEMINI_TTS_VOICE=Kore`; caption timing is aligned to the real pauses in the audio) | captions at reading speed, silent track |
+| Voiceover | Reels require generated speech. `TTS_PROVIDER=edge` uses Edge neural voices (`TTS_VOICE=en-IN-NeerjaNeural`); `auto` can fall back to Gemini TTS (`GEMINI_TTS_VOICE=Kore`) | Reel is not published; the story falls back to a photo, carousel, or card |
 | Music | `MUSIC_PATH` = a **royalty-free** file you have the rights to; played quietly under the voice (`MUSIC_VOLUME`) | no music |
 
 * `CONTENT_FORMATS=carousel:1,reel:1` alternates image and video posts (`reel:1` = video only, `carousel:2,reel:1` = 2:1).
@@ -204,7 +204,7 @@ Without that, Instagram can remove the post and issue copyright strikes against 
 **Remix** / **Collab** features are the platform-sanctioned way to build on someone else's Reel; they cannot be
 automated through the API.
 
-For a voice-free, more natural look on automatic Reels set `TTS_PROVIDER=none` (captions + footage + optional music).
+Set `TTS_PROVIDER=none` to disable generated voice; automatic Reel choices are then replaced by a still format.
 
 ## Trending news and photo accuracy
 
@@ -411,7 +411,7 @@ Private repos use roughly 1,500 Actions minutes/month at this frequency; public 
 | `No module named 'edge_tts'` | `python -m pip install -r requirements.txt` (Gemini voice is used meanwhile; Edge gives more precise caption timing) |
 | `Pexels key rejected (HTTP 401)` | the key in `.env` is a placeholder or wrong: delete the `PEXELS_API_KEY` line or paste a real key. Placeholders like `your_key` are ignored automatically |
 | `run --dry-run` says `idle ... (breaking-only)` | normal outside your `POST_TIMES` windows; use `run --force --dry-run` to test any time |
-| Reel has no voice | `verify` shows the TTS result; check internet access or set `TTS_PROVIDER=gemini`; captions still work |
+| Reel falls back to a still format | Check TTS availability and `TTS_PROVIDER`; Reels are published only when valid voiceover audio is generated |
 | Preview and published background differ | fixed: choices are now seeded by the story (update to the latest version). The voice can still differ slightly between runs |
 | No real photos appear | Commons had no licence-safe photo matching the names (normal for very new events); check the log lines `commons: no licence-safe relevant photo for ...`; stock footage is used instead |
 | `idle: no suitable story` for hours | few stories pass `MIN_SOURCES=2` and the trend rule; run `python main.py trending` to see why, or set `MIN_SOURCES=1` |

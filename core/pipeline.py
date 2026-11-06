@@ -22,7 +22,7 @@ from . import config
 from .ai_writer import AIWriter, UnfocusedStoryError, compose_caption, compose_link_message
 from .analytics import update_insights
 from . import collector as collector_mod
-from . import editorial, story
+from . import editorial, reel_studio, story
 from .collector import collect_news
 from .commons import Photo
 from .editorial import Decision
@@ -433,11 +433,18 @@ class Pipeline:
         if d.format == "video":
             v = d.video
             credit = v.caption_credit or v.attribution or v.creator or v.source
-            path = prepare_original_video(v, tmp / f"{stem}.mp4", credit_text=f"Video: {credit}")
+            voice_content, voice_mode = self.writer.write_reel(cand)
+            self._warn_if_fallback(voice_mode)
+            voice = reel_studio.synthesize(reel_studio.narration_text(voice_content), tmp)
+            reel_studio.validate_voiceover(voice)
+            path = prepare_original_video(v, tmp / f"{stem}.mp4", voiceover=voice,
+                                         credit_text=f"Video: {credit}")
             content, mode = self.writer.write(cand) if content is None else (content, "ai")
+            if voice_mode == "fallback":
+                notes.append("Narration uses extractive fallback copy.")
             notes.append(f"🎥 Original footage: {credit}" + (" (original sound)" if v.has_audio else ""))
             return {"files": [path], "content": content, "mode": mode, "notes": notes, "media_use": "event_media",
-                    "images_credit": None, "reel_info": f"original-video audio={v.has_audio}",
+                    "images_credit": None, "reel_info": f"original-video audio={v.has_audio} +voiceover",
                     "alt_text": None}
         if d.format == "photo":
             files = render_photo_post(content, cand, d.photos[0], tmp, stem, local_now)
@@ -471,6 +478,7 @@ class Pipeline:
         photos = [self._as_photo(a) for a in d.photos[:4]]
         res = self._call_reel_maker(content, cand, tmp / f"{stem}.mp4", authentic_photos=photos,
                                     stock_ok=d.illustrative_footage, voiceover=d.voiceover)
+        reel_studio.validate_reel_result(res)
         stock = res.footage in ("pexels", "pixabay", "local")
         if stock:
             notes.append("🎞️ Illustrative footage: generic stock clips, not from the event itself.")
@@ -493,6 +501,8 @@ class Pipeline:
         expected = "video/mp4" if video else "image/jpeg"
         if any(k != expected for k in kinds) or (video and len(files) != 1) or (not video and not 1 <= len(files) <= 10):
             raise RuntimeError(f"format '{fmt}' does not match the rendered media {kinds}")
+        if video:
+            reel_studio.validate_reel_result(reel_studio.ReelResult(Path(files[0]), True, "validated", 0.0))
         record["media_types"] = kinds
         if dry:
             out_dir = config.PREVIEW_DIR
@@ -592,6 +602,7 @@ class Pipeline:
                         content, mode = self.writer.write_reel(cand)
                         self._warn_if_fallback(mode)
                         res = self.reel_maker(content, cand, tmp / f"{stem}.mp4", music_path=config.MUSIC_PATH or None)
+                        reel_studio.validate_reel_result(res)
                         files = [res.path]
                         reel_info = f"voice={res.voiced} footage={res.footage}" + (" +photos" if res.images_credit else "")
                         if res.style:
@@ -602,8 +613,18 @@ class Pipeline:
                     else:  # legacy "cards" style: info cards as a slideshow video
                         content, mode = self.writer.write(cand)
                         self._warn_if_fallback(mode)
-                        files = [encode_slideshow(render_slides(content, cand, local_now, REEL), tmp / f"{stem}.mp4",
-                                                  music_path=config.MUSIC_PATH or None)]
+                        voice_content, voice_mode = self.writer.write_reel(cand)
+                        self._warn_if_fallback(voice_mode)
+                        voice_text = reel_studio.narration_text(voice_content)
+                        voice = reel_studio.synthesize(voice_text, tmp)
+                        speech = reel_studio.validate_voiceover(voice)
+                        slides = render_slides(content, cand, local_now, REEL)
+                        per_slide = max(config.VIDEO_SECONDS_PER_SLIDE,
+                                        (speech + 0.45 * (len(slides) - 1) + 0.5) / max(len(slides) - 0.1, 1))
+                        silent = encode_slideshow(slides, tmp / f"{stem}_cards.mp4", seconds_per_slide=per_slide,
+                                                  music_path=config.MUSIC_PATH or None)
+                        files = [reel_studio.mux_voiceover(silent, voice, tmp / f"{stem}.mp4",
+                                                           background_volume=config.MUSIC_VOLUME)]
                 except UnfocusedStoryError:
                     raise                          # a roundup is skipped entirely, not turned into a carousel
                 except Exception as e:  # noqa: BLE001 - never lose the post just because video failed

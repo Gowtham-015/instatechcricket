@@ -82,9 +82,10 @@ jobs:
           EDITORIAL_MIN_CONFIDENCE: ${{ vars.EDITORIAL_MIN_CONFIDENCE || '0.35' }}
           MIN_CORROBORATION_SENSITIVE: ${{ vars.MIN_CORROBORATION_SENSITIVE || '2' }}
           REEL_STYLE: ${{ vars.REEL_STYLE || 'dynamic' }}
-          REEL_VOICEOVER: ${{ vars.REEL_VOICEOVER || 'auto' }}
+          REEL_VOICEOVER: ${{ vars.REEL_VOICEOVER || 'always' }}
           REEL_NARRATION_MIN: ${{ vars.REEL_NARRATION_MIN || '0.6' }}
-          TTS_VOICE: ${{ vars.TTS_VOICE }}
+          TTS_PROVIDER: ${{ vars.TTS_PROVIDER || 'edge' }}
+          TTS_VOICE: ${{ vars.TTS_VOICE || 'en-IN-NeerjaNeural' }}
           TTS_VOICES: ${{ vars.TTS_VOICES }}
           TREND_PROVIDERS: ${{ vars.TREND_PROVIDERS || 'google,wikipedia' }}
           TRENDS_GEO: ${{ vars.TRENDS_GEO || 'IN' }}

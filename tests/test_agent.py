@@ -160,10 +160,14 @@ class Base(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp())
         p = mock.patch.multiple(config, DATA_DIR=self.tmp, PREVIEW_DIR=self.tmp / "preview",
                                 CONTENT_FORMATS={"carousel": 1}, FORMAT_POLICY="legacy", VIDEO_SECONDS_PER_SLIDE=0.6, VIDEO_FPS=10,
-                                REEL_STYLE="cards", REAL_PHOTOS=False, MIN_SOURCES=1, TRENDS_ENABLED=False, PHOTO_SOURCES=["commons", "openverse"], PEXELS_API_KEY="", PIXABAY_API_KEY="", STOCK_PROVIDER="auto", TTS_PROVIDER="none", BROLL_DIR="", MUSIC_PATH="",
+                                REEL_STYLE="cards", REAL_PHOTOS=False, MIN_SOURCES=1, TRENDS_ENABLED=False, PHOTO_SOURCES=["commons", "openverse"], PEXELS_API_KEY="", PIXABAY_API_KEY="", STOCK_PROVIDER="auto", TTS_PROVIDER="edge", REEL_VOICEOVER="always", BROLL_DIR="", MUSIC_PATH="",
                                 ACCOUNT_HANDLE="@dailypulse", BRAND_NAME="Daily Pulse", ALERT_WEBHOOK_URL="")
         p.start()
         self.addCleanup(p.stop)
+        tts_patch = mock.patch.object(reel_studio, "synthesize",
+                          side_effect=lambda text, out_dir: make_test_voiceover(text, out_dir))
+        tts_patch.start()
+        self.addCleanup(tts_patch.stop)
 
 
 # ------------------------------------------------------------------ dedupe
@@ -1100,7 +1104,27 @@ def make_test_clip(path: Path, seconds=6):
                     f"testsrc2=s=720x1280:r=30:d={seconds}", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(path)], check=True)
 
 
+def make_test_mp4(path: Path, seconds=4):
+    subprocess.run([video_renderer.find_ffmpeg(), "-y", "-loglevel", "error", "-f", "lavfi", "-i",
+                    f"testsrc2=s=320x568:r=10:d={seconds}", "-f", "lavfi", "-i",
+                    f"sine=frequency=200:duration={seconds}", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                    "-c:a", "aac", "-shortest", str(path)], check=True)
+
+
+def make_test_voiceover(text, out_dir):
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "test_voice.wav"
+    subprocess.run([video_renderer.find_ffmpeg(), "-y", "-loglevel", "error", "-f", "lavfi", "-i",
+                    "sine=frequency=200:duration=8", str(path)], check=True)
+    return tts.Voiceover(path, 8.0, tts.distribute_words(text, 8.0), "test")
+
+
 class TestReelRenderer(Base):
+    def voiceover(self):
+        text = reel_studio.narration_text(ai_writer.validate_reel(dict(REEL_VALID), "", "Technology"))
+        return make_test_voiceover(text, self.tmp)
+
     def test_chunking_rules(self):
         words = [(w, i * 0.3, i * 0.3 + 0.25) for i, w in enumerate("This is a really long sentence, with commas and more words".split())]
         chunks = reel_renderer.chunk_words(words)
@@ -1126,11 +1150,7 @@ class TestReelRenderer(Base):
             clips.append(self.tmp / f"c{i}.mp4")
             make_test_clip(clips[-1])
         content = ai_writer.validate_reel(dict(REEL_VALID), "", "Technology")
-        voice_wav = self.tmp / "voice.wav"
-        subprocess.run([video_renderer.find_ffmpeg(), "-y", "-loglevel", "error", "-f", "lavfi", "-i",
-                        "sine=frequency=200:duration=8", str(voice_wav)], check=True)
-        text = reel_studio.narration_text(content)
-        vo = tts.Voiceover(voice_wav, 8.0, tts.distribute_words(text, 8.0))
+        vo = self.voiceover()
 
         class Px:
             enabled, name = True, "pexels"
@@ -1141,15 +1161,61 @@ class TestReelRenderer(Base):
         self.assertEqual((info["video"], info["audio"], info["size"]), ("h264", "aac", (1080, 1920)))
         self.assertAlmostEqual(info["duration"], reel_renderer.LEAD + 8.0 + reel_renderer.OUTRO, delta=0.5)
 
-    def test_full_reel_without_voice_or_footage_still_moves(self):
-        """Offline / no keys: animated background + reading-speed captions, never a failure."""
+    def test_missing_voiceover_fails_instead_of_building_a_silent_reel(self):
         content = ai_writer.validate_reel(dict(REEL_VALID), "", "Technology")
-        res = reel_studio.make_reel(content, make_cluster(), self.tmp / "r2.mp4",
-                                    providers=[], tts=lambda t, d: None)
-        info = video_renderer.probe(res.path)
-        self.assertEqual((res.voiced, res.footage), (False, "animated"))
-        self.assertEqual((info["video"], info["audio"], info["size"]), ("h264", "aac", (1080, 1920)))
-        self.assertGreaterEqual(info["duration"], 8.0)
+        with self.assertRaisesRegex(reel_studio.ReelVoiceoverError, "returned no audio"):
+            reel_studio.make_reel(content, make_cluster(), self.tmp / "r2.mp4", providers=[], tts=lambda t, d: None)
+
+    def test_tts_exception_fails_reel_construction(self):
+        content = ai_writer.validate_reel(dict(REEL_VALID), "", "Technology")
+
+        def fail(text, out_dir):
+            raise RuntimeError("provider unavailable")
+
+        with self.assertRaisesRegex(reel_studio.ReelVoiceoverError, "provider unavailable"):
+            reel_studio.make_reel(content, make_cluster(), self.tmp / "r-fail.mp4", providers=[], tts=fail)
+
+    def test_invalid_or_empty_voice_audio_fails_reel_construction(self):
+        content = ai_writer.validate_reel(dict(REEL_VALID), "", "Technology")
+        words = tts.distribute_words(reel_studio.narration_text(content), 8.0)
+        for audio in (b"not audio", b""):
+            with self.subTest(audio_size=len(audio)):
+                path = self.tmp / f"voice-{len(audio)}.mp3"
+                path.write_bytes(audio)
+                voice = tts.Voiceover(path, 8.0, words, "edge")
+                with self.assertRaises(reel_studio.ReelVoiceoverError):
+                    reel_studio.make_reel(content, make_cluster(), self.tmp / f"invalid-{len(audio)}.mp4",
+                                          providers=[], tts=lambda text, out_dir: voice)
+
+    def test_silent_audio_stream_is_rejected(self):
+        path = self.tmp / "silent.wav"
+        subprocess.run([video_renderer.find_ffmpeg(), "-y", "-loglevel", "error", "-f", "lavfi", "-i",
+                        "anullsrc=r=24000:cl=mono:d=4", str(path)], check=True)
+        voice = tts.Voiceover(path, 4.0, tts.distribute_words("Four words make this narration", 4.0), "edge")
+        with self.assertRaisesRegex(reel_studio.ReelVoiceoverError, "silent"):
+            reel_studio.validate_voiceover(voice)
+
+    def test_short_and_duration_mismatched_voiceover_are_rejected(self):
+        text = "This is a test voiceover."
+        path = self.tmp / "short.wav"
+        subprocess.run([video_renderer.find_ffmpeg(), "-y", "-loglevel", "error", "-f", "lavfi", "-i",
+                        "sine=frequency=220:duration=0.7", str(path)], check=True)
+        short = tts.Voiceover(path, 0.7, tts.distribute_words(text, 0.7), "edge")
+        with self.assertRaises(reel_studio.ReelVoiceoverError):
+            reel_studio.validate_voiceover(short)
+        subprocess.run([video_renderer.find_ffmpeg(), "-y", "-loglevel", "error", "-f", "lavfi", "-i",
+                        "sine=frequency=220:duration=4", str(path)], check=True)
+        mismatch = tts.Voiceover(path, 6.0, tts.distribute_words(text, 6.0), "edge")
+        with self.assertRaisesRegex(reel_studio.ReelVoiceoverError, "does not match"):
+            reel_studio.validate_voiceover(mismatch)
+
+    def test_silent_final_reel_audio_is_rejected(self):
+        path = self.tmp / "silent-reel.mp4"
+        subprocess.run([video_renderer.find_ffmpeg(), "-y", "-loglevel", "error", "-f", "lavfi", "-i",
+                        "testsrc2=s=320x568:r=10:d=4", "-f", "lavfi", "-i",
+                        "anullsrc=r=44100:cl=stereo:d=4", "-c:v", "libx264", "-c:a", "aac", str(path)], check=True)
+        with self.assertRaisesRegex(reel_studio.ReelVoiceoverError, "silent"):
+            reel_studio.validate_reel_result(reel_studio.ReelResult(path, True, "test", 4.0))
 
     def test_broken_footage_falls_back_to_animated_background(self):
         bad = self.tmp / "bad.mp4"
@@ -1166,8 +1232,10 @@ class TestReelRenderer(Base):
             return out
         content = ai_writer.validate_reel(dict(REEL_VALID), "", "Technology")
         with mock.patch.object(reel_studio, "prepare_animated_background", return_value=anim) as animated, \
-                mock.patch.object(reel_studio, "compose_reel", side_effect=fake_compose):
-            res = reel_studio.make_reel(content, make_cluster(), self.tmp / "r3.mp4", providers=[Px()], tts=lambda t, d: None)
+            mock.patch.object(reel_studio, "compose_reel", side_effect=fake_compose), \
+            mock.patch.object(reel_studio, "validate_reel_result"):
+            res = reel_studio.make_reel(content, make_cluster(), self.tmp / "r3.mp4", providers=[Px()],
+                        tts=lambda t, d: self.voiceover())
         self.assertEqual(res.footage, "animated")
         animated.assert_called_once()  # the real ffmpeg rejected the corrupt clip -> animated background used
 
@@ -1258,14 +1326,14 @@ class TestFootageSources(Base):
             return anim
 
         def fake_compose(bg, content, cluster, words, total, voice, music, out):
-            out.write_bytes(b"v")
+            make_test_mp4(out, 8)
             return out
         content = ai_writer.validate_reel(dict(REEL_VALID), "", "Technology")
         with mock.patch.object(reel_studio, "prepare_footage_background", side_effect=fake_footage), \
                 mock.patch.object(reel_studio, "compose_reel", side_effect=fake_compose), \
                 mock.patch.object(config, "BROLL_DIR", str(mine)):
             res = reel_studio.make_reel(content, make_cluster(), self.tmp / "o.mp4", providers=[Empty(), Broken()],
-                                        tts=lambda t, d: None)
+                                        tts=lambda t, d: make_test_voiceover(t, d))
         self.assertEqual(calls, ["pexels", "pixabay"])
         self.assertEqual((res.footage, res.credit), ("local", None))
         self.assertEqual(prepared[0][0].name, "a.mp4")
@@ -1283,13 +1351,14 @@ class TestFootageSources(Base):
         anim.write_bytes(b"x")
 
         def fake_compose(bg, content, cluster, words, total, voice, music, out):
-            out.write_bytes(b"v")
+            make_test_mp4(out, 8)
             return out
         content = ai_writer.validate_reel(dict(REEL_VALID), "", "Technology")
         with mock.patch.object(reel_studio, "prepare_animated_background", return_value=anim), \
                 mock.patch.object(reel_studio, "compose_reel", side_effect=fake_compose), \
                 mock.patch.multiple(config, BROLL_DIR=str(mine), STOCK_PROVIDER="none"):
-            res = reel_studio.make_reel(content, make_cluster(), self.tmp / "o2.mp4", providers=[], tts=lambda t, d: None)
+            res = reel_studio.make_reel(content, make_cluster(), self.tmp / "o2.mp4", providers=[],
+                                        tts=lambda t, d: make_test_voiceover(t, d))
         self.assertEqual(res.footage, "animated")
 
 
@@ -1458,12 +1527,13 @@ class TestFootageRelevance(Base):
         anim.write_bytes(b"x")
 
         def fake_compose(bg, content, cluster, words, total, voice, music, out):
-            out.write_bytes(b"v")
+            make_test_mp4(out, 8)
             return out
         content = ai_writer.validate_reel(dict(REEL_VALID, broll_queries=["functional issues"]), "", "News")
         with mock.patch.object(reel_studio, "prepare_animated_background", return_value=anim), \
                 mock.patch.object(reel_studio, "compose_reel", side_effect=fake_compose):
-            reel_studio.make_reel(content, c, self.tmp / "o.mp4", providers=[Spy()], tts=lambda t, d: None)
+            reel_studio.make_reel(content, c, self.tmp / "o.mp4", providers=[Spy()],
+                                  tts=lambda t, d: make_test_voiceover(t, d))
         self.assertEqual(seen[0][0], "voting ballot box")
         self.assertNotIn("functional", " ".join(seen[0]))
 
@@ -1606,14 +1676,14 @@ class TestDocumentaryPhotos(Base):
             return tmp / "bg.mp4"
 
         def fake_compose(bg, content, cluster, words, total, voice, music, out):
-            out.write_bytes(b"v")
+            make_test_mp4(out, 8)
             return out
         content = ai_writer.validate_reel(dict(REEL_VALID, photo_queries=["Eden Gardens"]), "", "Sports")
         with mock.patch.object(config, "REAL_PHOTOS", True), \
                 mock.patch.object(reel_studio, "prepare_mixed_background", side_effect=fake_mixed), \
                 mock.patch.object(reel_studio, "compose_reel", side_effect=fake_compose):
             res = reel_studio.make_reel(content, make_cluster("Sports"), self.tmp / "o.mp4", providers=[], commons=fake,
-                                        tts=lambda t, d: None)
+                                        tts=lambda t, d: make_test_voiceover(t, d))
         self.assertEqual([i["kind"] for i in captured["items"]], ["photo", "photo"])
         self.assertEqual(res.footage, "commons")
         self.assertEqual(res.images_credit, "Jane Doe (CC BY 4.0) via Wikimedia Commons")
@@ -1637,14 +1707,14 @@ class TestDocumentaryPhotos(Base):
             return tmp / "bg.mp4"
 
         def fake_compose(bg, content, cluster, words, total, voice, music, out):
-            out.write_bytes(b"v")
+            make_test_mp4(out, 8)
             return out
         content = ai_writer.validate_reel(dict(REEL_VALID), "", "Sports")
         with mock.patch.object(config, "REAL_PHOTOS", True), \
                 mock.patch.object(reel_studio, "prepare_mixed_background", side_effect=fake_mixed), \
                 mock.patch.object(reel_studio, "compose_reel", side_effect=fake_compose):
             res = reel_studio.make_reel(content, make_cluster("Sports"), self.tmp / "o2.mp4", providers=[Px()], commons=cc,
-                                        tts=lambda t, d: None)
+                                        tts=lambda t, d: make_test_voiceover(t, d))
         self.assertEqual(got["kinds"], ["photo", "clip", "photo"])
         self.assertEqual((res.footage, res.credit), ("pixabay", "Pixabay"))
 
@@ -1661,19 +1731,21 @@ class TestDocumentaryPhotos(Base):
         anim.write_bytes(b"x")
 
         def fake_compose(bg, content, cluster, words, total, voice, music, out):
-            out.write_bytes(b"v")
+            make_test_mp4(out, 8)
             return out
         content = ai_writer.validate_reel(dict(REEL_VALID), "", "Technology")
         for _ in range(2):
             with mock.patch.object(reel_studio, "prepare_animated_background", return_value=anim), \
                     mock.patch.object(reel_studio, "compose_reel", side_effect=fake_compose):
-                reel_studio.make_reel(content, make_cluster(), self.tmp / "o3.mp4", providers=[Spy()], tts=lambda t, d: None)
+                reel_studio.make_reel(content, make_cluster(), self.tmp / "o3.mp4", providers=[Spy()],
+                                      tts=lambda t, d: make_test_voiceover(t, d))
         self.assertEqual(seeds[0], seeds[1])
         other = make_cluster()
         other["fingerprint"] = "different-story"
         with mock.patch.object(reel_studio, "prepare_animated_background", return_value=anim), \
                 mock.patch.object(reel_studio, "compose_reel", side_effect=fake_compose):
-            reel_studio.make_reel(content, other, self.tmp / "o4.mp4", providers=[Spy()], tts=lambda t, d: None)
+            reel_studio.make_reel(content, other, self.tmp / "o4.mp4", providers=[Spy()],
+                                  tts=lambda t, d: make_test_voiceover(t, d))
         self.assertNotEqual(seeds[0], seeds[2])
 
     def test_caption_contains_images_credit_within_limit(self):
@@ -1689,8 +1761,7 @@ class TestDocumentaryPhotos(Base):
 
     def test_pipeline_puts_images_credit_in_the_published_caption(self):
         def make(content, cand, out_path, music_path=None):
-            subprocess.run([video_renderer.find_ffmpeg(), "-y", "-loglevel", "error", "-f", "lavfi", "-i",
-                            "testsrc2=s=320x568:r=10:d=1", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(out_path)], check=True)
+            make_test_mp4(Path(out_path), 4)
             return reel_studio.ReelResult(Path(out_path), True, "commons", 8.0, "Jane Doe (CC BY 4.0) via Wikimedia Commons")
         arts = [make_article(1, "News", "BBC News", now=datetime(2026, 10, 5, 3, 40, tzinfo=timezone.utc))]
         ig = FakeIG()
@@ -1830,8 +1901,7 @@ class TestTrendingPipeline(PipelineFixture):
         p = self.build(articles=[a, b], ai=ai)
 
         def make(content, cand, out_path, music_path=None):
-            subprocess.run([video_renderer.find_ffmpeg(), "-y", "-loglevel", "error", "-f", "lavfi", "-i",
-                            "testsrc2=s=320x568:r=10:d=1", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(out_path)], check=True)
+            make_test_mp4(Path(out_path), 4)
             return reel_studio.ReelResult(Path(out_path), True, "animated", 8.0)
         p.reel_maker = make
         with mock.patch.multiple(config, CONTENT_FORMATS={"reel": 1}, REEL_STYLE="dynamic",
@@ -1996,14 +2066,15 @@ class TestOpenverse(Base):
             return tmp / "bg.mp4"
 
         def fake_compose(bg, content, cluster, words, total, voice, music, out):
-            out.write_bytes(b"v")
+            make_test_mp4(out, 8)
             return out
         content = ai_writer.validate_reel(dict(REEL_VALID, photo_queries=["Gaurav Gupta"]), "", "Entertainment")
         with mock.patch.object(config, "REAL_PHOTOS", True), \
                 mock.patch.object(reel_studio, "prepare_mixed_background", side_effect=fake_mixed), \
                 mock.patch.object(reel_studio, "compose_reel", side_effect=fake_compose):
             res = reel_studio.make_reel(content, make_cluster("Entertainment"), self.tmp / "o.mp4", providers=[],
-                                        photo_sources=[src("commons", 1), src("openverse", 5)], tts=lambda t, d: None)
+                                        photo_sources=[src("commons", 1), src("openverse", 5)],
+                                        tts=lambda t, d: make_test_voiceover(t, d))
         self.assertEqual([(n, w) for n, w, _, _ in seen], [("commons", 4), ("openverse", 3)])   # 4 photos in total
         self.assertEqual(got["n"], 4)
         self.assertTrue(all(ctx for _, _, ctx, _ in seen))                                    # context is always passed
@@ -2162,14 +2233,14 @@ class TestOfficialAndOwnPhotos(Base):
             return tmp / "bg.mp4"
 
         def fake_compose(bg, content, cluster, words, total, voice, music, out):
-            out.write_bytes(b"v")
+            make_test_mp4(out, 8)
             return out
         content = ai_writer.validate_reel(dict(REEL_VALID), "", "News")
         with mock.patch.object(config, "REAL_PHOTOS", True), \
                 mock.patch.object(reel_studio, "prepare_mixed_background", side_effect=fake_mixed), \
                 mock.patch.object(reel_studio, "compose_reel", side_effect=fake_compose):
             res = reel_studio.make_reel(content, make_cluster("News"), self.tmp / "o.mp4", providers=[], photo_sources=[fake],
-                                        tts=lambda t, d: None)
+                                        tts=lambda t, d: make_test_voiceover(t, d))
         self.assertEqual(got["credits"], ["", "Jane Doe (CC BY 4.0)"])
         self.assertIn("Syced (CC0)", res.images_credit)                          # still named in the caption
 
@@ -2463,8 +2534,7 @@ class TestVarietyInPipeline(PipelineFixture):
 
         def make(content, cand, out_path, music_path=None):
             seen.append(cand.get("reel_style"))
-            subprocess.run([video_renderer.find_ffmpeg(), "-y", "-loglevel", "error", "-f", "lavfi", "-i",
-                            "testsrc2=s=320x568:r=10:d=1", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(out_path)], check=True)
+            make_test_mp4(Path(out_path), 4)
             return reel_studio.ReelResult(Path(out_path), True, "animated", 8.0, None, cand.get("reel_style"))
         p = self.build(ai=lambda pr: json.dumps(REEL_VALID if "VOICEOVER" in pr else VALID))
         p.reel_maker = make
@@ -2484,8 +2554,7 @@ class TestVarietyInPipeline(PipelineFixture):
 
         def make(content, cand, out_path, music_path=None):
             seen.append(cand.get("reel_style"))
-            subprocess.run([video_renderer.find_ffmpeg(), "-y", "-loglevel", "error", "-f", "lavfi", "-i",
-                            "testsrc2=s=320x568:r=10:d=1", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(out_path)], check=True)
+            make_test_mp4(Path(out_path), 4)
             return reel_studio.ReelResult(Path(out_path), True, "animated", 8.0)
         p = self.build(ai=lambda pr: json.dumps(REEL_VALID if "VOICEOVER" in pr else VALID))
         p.reel_maker = make
@@ -2820,8 +2889,7 @@ class TestFacebookInPipeline(PipelineFixture):
                 return {"id": "v", "permalink": "https://www.facebook.com/reel/v"}
 
         def make(content, cand, out_path, music_path=None):
-            subprocess.run([video_renderer.find_ffmpeg(), "-y", "-loglevel", "error", "-f", "lavfi", "-i",
-                            "testsrc2=s=320x568:r=10:d=1", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(out_path)], check=True)
+            make_test_mp4(Path(out_path), 4)
             return reel_studio.ReelResult(Path(out_path), True, "animated", 8.0)
         p = self.build_fb(Rec(), ai=lambda pr: json.dumps(REEL_VALID if "VOICEOVER" in pr else VALID))
         p.reel_maker = make
@@ -2834,8 +2902,7 @@ class TestFacebookInPipeline(PipelineFixture):
 
     def _reel_fb_run(self, rec, mode):
         def make(content, cand, out_path, music_path=None):
-            subprocess.run([video_renderer.find_ffmpeg(), "-y", "-loglevel", "error", "-f", "lavfi", "-i",
-                            "testsrc2=s=320x568:r=10:d=1", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(out_path)], check=True)
+            make_test_mp4(Path(out_path), 4)
             return reel_studio.ReelResult(Path(out_path), True, "animated", 8.0)
         p = self.build_fb(rec, ai=lambda pr: json.dumps(REEL_VALID if "VOICEOVER" in pr else VALID))
         p.reel_maker = make
@@ -2946,7 +3013,7 @@ class TestFacebookInPipeline(PipelineFixture):
                         "-c:v", "libx264", "-pix_fmt", "yuv420p", str(src)], check=True)
 
         def fake_prepare(video, out, **kw):
-            Path(out).write_bytes(b"0" * 20_000)
+            make_test_mp4(Path(out), 4)
             return Path(out)
         with mock.patch.object(clip_post, "prepare_clip", side_effect=fake_prepare), mock.patch.object(config, "FB_MODE", "crosspost"):
             res = clip_post.post_clip(p, video=src, topic="India cricket teams win Asian Games gold",
@@ -2970,8 +3037,7 @@ class TestDynamicReelPipeline(PipelineFixture):
             calls.append(content)
             if fail:
                 raise video_renderer.VideoError("render exploded")
-            subprocess.run([video_renderer.find_ffmpeg(), "-y", "-loglevel", "error", "-f", "lavfi", "-i",
-                            "testsrc2=s=320x568:r=10:d=1", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(out_path)], check=True)
+            make_test_mp4(Path(out_path), 4)
             return reel_studio.ReelResult(Path(out_path), True, footage, 8.0)
         make.calls = calls
         return make
@@ -3032,7 +3098,7 @@ class TestOwnClipPosting(PipelineFixture):
         self.assertEqual((info["video"], info["audio"], info["size"]), ("h264", "aac", (1080, 1920)))
         self.assertAlmostEqual(info["duration"], 5.0, delta=0.4)
 
-    def test_silent_clip_gets_an_audio_track_and_long_clip_is_trimmed(self):
+    def test_silent_clip_gets_an_intermediate_track_and_long_clip_is_trimmed(self):
         src = self.make_video("silent.mp4", 720, 1280, 6, audio=False)
         out = clip_post.prepare_clip(src, self.tmp / "o2.mp4", cluster=self.cluster(), hook=None, credit="X Org",
                                      max_seconds=4, fps=10)
@@ -3080,7 +3146,7 @@ class TestOwnClipPosting(PipelineFixture):
         arts[0]["title"] = "India women and men win Asian Games cricket gold medals"
         arts[0]["summary"] = "India's cricket teams won gold at the Asian Games in a double celebration for the squads."
         p = self.build(articles=arts)
-        src = self.make_video("c.mp4", 1280, 720, 5)
+        src = self.make_video("c.mp4", 1280, 720, 5, audio=False)
         with mock.patch.object(config, "VIDEO_FPS", 10):
             res = clip_post.post_clip(p, video=src, topic="India cricket teams win Asian Games gold",
                                       credit="BCCI / Star Sports")
@@ -3094,16 +3160,25 @@ class TestOwnClipPosting(PipelineFixture):
         left = list((self.tmp / "public").glob("*")) if (self.tmp / "public").exists() else []
         self.assertEqual(left, [])
 
+    def test_operator_clip_without_narration_never_uploads_or_publishes(self):
+        p = self.build(articles=[])
+        src = self.make_video("no-voice.mp4", 720, 1280, 5, audio=False)
+        upload = mock.Mock()
+        p.host.upload = upload
+        p.facebook_publish = mock.Mock()
+        with mock.patch("core.clip_post.reel_studio.synthesize", return_value=None):
+            with self.assertRaisesRegex(clip_post.ClipError, "without valid generated narration"):
+                clip_post.post_clip(p, video=src, topic="India cricket teams win Asian Games gold",
+                                    credit="BCCI", from_news=False, category="Sports")
+        upload.assert_not_called()
+        p.facebook_publish.assert_not_called()
+        self.assertEqual(self.ig_session.calls, [])
+
     def test_dry_run_and_validation(self):
         p = self.build(articles=[])
         src = self.make_video("d.mp4", 720, 1280, 5)
-
-        def fake_prepare(video, out, **kw):
-            Path(out).write_bytes(b"0" * 20_000)
-            return Path(out)
-        with mock.patch.object(clip_post, "prepare_clip", side_effect=fake_prepare):
-            res = clip_post.post_clip(p, video=src, topic="India cricket teams win Asian Games gold",
-                                      credit="BCCI", dry=True, from_news=False, category="Sports")
+        res = clip_post.post_clip(p, video=src, topic="India cricket teams win Asian Games gold",
+                                  credit="BCCI", dry=True, from_news=False, category="Sports")
         self.assertEqual(res["status"], "dry_run")
         self.assertTrue(Path(res["files"][0]).exists())
         self.assertEqual(self.ig_session.published, 0)
