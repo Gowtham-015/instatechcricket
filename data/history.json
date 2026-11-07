@@ -901,7 +901,15 @@
     ],
     "facebook": null,
     "media_id": "18082413893737938",
-    "permalink": "https://www.instagram.com/reel/DfZEdU4j5_x/"
+    "permalink": "https://www.instagram.com/reel/DfZEdU4j5_x/",
+    "insights": {
+      "reach": 23,
+      "saved": 0,
+      "shares": 0,
+      "likes": 0,
+      "comments": 0,
+      "total_interactions": 0
+    }
   },
   {
     "id": "20261106103135_c2bdf601",
@@ -943,7 +951,15 @@
     ],
     "facebook": null,
     "media_id": "18133012753744960",
-    "permalink": "https://www.instagram.com/p/DfZZhW5lbK7/"
+    "permalink": "https://www.instagram.com/p/DfZZhW5lbK7/",
+    "insights": {
+      "reach": 0,
+      "saved": 0,
+      "shares": 0,
+      "likes": 0,
+      "comments": 0,
+      "total_interactions": 0
+    }
   },
   {
     "id": "20261106103440_be4d5fe6",
@@ -975,7 +991,15 @@
     ],
     "facebook": null,
     "media_id": "17943512841382860",
-    "permalink": "https://www.instagram.com/reel/DfZaG27DnLO/"
+    "permalink": "https://www.instagram.com/reel/DfZaG27DnLO/",
+    "insights": {
+      "reach": 17,
+      "saved": 0,
+      "shares": 0,
+      "likes": 1,
+      "comments": 0,
+      "total_interactions": 1
+    }
   },
   {
     "id": "20261106104753_165ec3cf",
@@ -1012,7 +1036,15 @@
     ],
     "facebook": null,
     "media_id": "18084535403711367",
-    "permalink": "https://www.instagram.com/p/DfZbcQMIPiD/"
+    "permalink": "https://www.instagram.com/p/DfZbcQMIPiD/",
+    "insights": {
+      "reach": 2,
+      "saved": 0,
+      "shares": 0,
+      "likes": 2,
+      "comments": 0,
+      "total_interactions": 2
+    }
   },
   {
     "id": "20261106205741_8b885a6b",
@@ -1060,5 +1092,37 @@
     "facebook": null,
     "media_id": "18452075197124395",
     "permalink": "https://www.instagram.com/p/DfahK7FGPj5/"
+  },
+  {
+    "id": "20261107133729_b65eff0c",
+    "title": "AI Filmmaking Platform Core Studio Launches at Taiwan Creative Content Fest With 24 Specialized Agents",
+    "url": "https://variety.com/2026/film/markets-festivals/ai-filmmaking-platform-core-studio-launches-24-agents-tccf-1236941957/",
+    "category": "Technology",
+    "fingerprint": "b65eff0cee9f2c",
+    "sources": [
+      "Variety"
+    ],
+    "score": 64.2,
+    "breaking": false,
+    "mode": "ai",
+    "slot": "2026-11-07 18:00",
+    "caption_len": 271,
+    "published_at": "2026-11-07T13:37:29.348668+00:00",
+    "format": "card",
+    "reel": "",
+    "media_use": "editorial_graphic",
+    "decision": "no authentic photograph or video could be matched to this story; publishing an original fact card instead of a misleading picture or a generic Reel",
+    "articles": [
+      {
+        "url": "https://variety.com/2026/film/markets-festivals/ai-filmmaking-platform-core-studio-launches-24-agents-tccf-1236941957/",
+        "title": "AI Filmmaking Platform Core Studio Launches at Taiwan Creative Content Fest With 24 Specialized Agents"
+      }
+    ],
+    "media_types": [
+      "image/jpeg"
+    ],
+    "facebook": null,
+    "media_id": "17878645512634417",
+    "permalink": "https://www.instagram.com/p/DfcTmLSFgRt/"
   }
 ]
