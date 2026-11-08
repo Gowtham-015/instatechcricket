@@ -1091,7 +1091,15 @@
     ],
     "facebook": null,
     "media_id": "18452075197124395",
-    "permalink": "https://www.instagram.com/p/DfahK7FGPj5/"
+    "permalink": "https://www.instagram.com/p/DfahK7FGPj5/",
+    "insights": {
+      "reach": 0,
+      "saved": 0,
+      "shares": 0,
+      "likes": 1,
+      "comments": 0,
+      "total_interactions": 1
+    }
   },
   {
     "id": "20261107133729_b65eff0c",
@@ -1124,5 +1132,56 @@
     "facebook": null,
     "media_id": "17878645512634417",
     "permalink": "https://www.instagram.com/p/DfcTmLSFgRt/"
+  },
+  {
+    "id": "20261108080728_24dbcda8",
+    "title": "Trump asks UFC boss to be White House press secretary: 'Dana, please take the job!'",
+    "url": "https://www.bbc.co.uk/news/articles/cvze47p9jeexo?at_medium=RSS&at_campaign=rss",
+    "category": "News",
+    "fingerprint": "24dbcda82d0828",
+    "sources": [
+      "Al Jazeera",
+      "BBC News",
+      "NDTV Sports",
+      "Times of India"
+    ],
+    "score": 80.2,
+    "breaking": false,
+    "mode": "ai",
+    "slot": "2026-11-08 13:00",
+    "caption_len": 653,
+    "published_at": "2026-11-08T08:07:28.299004+00:00",
+    "format": "carousel",
+    "reel": "",
+    "media_use": "file_photo",
+    "decision": "6 relevant photos plus 7 distinct facts form a meaningful sequence",
+    "articles": [
+      {
+        "url": "https://www.bbc.co.uk/news/articles/cvze47p9jeexo?at_medium=RSS&at_campaign=rss",
+        "title": "Trump asks UFC boss to be White House press secretary: 'Dana, please take the job!'"
+      },
+      {
+        "url": "https://www.aljazeera.com/news/2026/11/8/trump-asks-ufc-chief-dana-white-to-be-white-house-press-secretary?traffic_source=rss",
+        "title": "Trump asks UFC chief Dana White to be White House press secretary"
+      },
+      {
+        "url": "https://sports.ndtv.com/us/mma/who-is-dana-white-all-about-the-ufc-chief-donald-trump-wants-as-white-house-press-secretary-12299324#publisher=newsstand",
+        "title": "Who Is Dana White? All About The UFC Chief Donald Trump Wants As White House Press Secretary"
+      },
+      {
+        "url": "https://timesofindia.indiatimes.com/world/us/dana-white-declines-trumps-offer-to-become-white-house-press-secretary-report/articleshow/135649493.cms",
+        "title": "Another setback for Trump as Dana White rejects White House press secretary offer"
+      }
+    ],
+    "media_types": [
+      "image/jpeg",
+      "image/jpeg",
+      "image/jpeg",
+      "image/jpeg",
+      "image/jpeg"
+    ],
+    "facebook": null,
+    "media_id": "18004056035805371",
+    "permalink": "https://www.instagram.com/p/DfeSppdFvlM/"
   }
 ]
