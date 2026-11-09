@@ -1131,7 +1131,15 @@
     ],
     "facebook": null,
     "media_id": "17878645512634417",
-    "permalink": "https://www.instagram.com/p/DfcTmLSFgRt/"
+    "permalink": "https://www.instagram.com/p/DfcTmLSFgRt/",
+    "insights": {
+      "reach": 0,
+      "saved": 0,
+      "shares": 0,
+      "likes": 0,
+      "comments": 0,
+      "total_interactions": 0
+    }
   },
   {
     "id": "20261108080728_24dbcda8",
@@ -1183,5 +1191,62 @@
     "facebook": null,
     "media_id": "18004056035805371",
     "permalink": "https://www.instagram.com/p/DfeSppdFvlM/"
+  },
+  {
+    "id": "20261109024616_b1a408e9",
+    "title": "Nvidia launches investigation into CEO's affair with suspected Chinese spy",
+    "url": "https://www.bbc.co.uk/news/articles/c3dxw10rjn9no?at_medium=RSS&at_campaign=rss",
+    "category": "News",
+    "fingerprint": "b1a408e919a1af",
+    "sources": [
+      "BBC Business",
+      "NDTV News",
+      "TechCrunch",
+      "The Hindu BusinessLine",
+      "The Hindu International",
+      "The Verge"
+    ],
+    "score": 87.8,
+    "breaking": true,
+    "mode": "ai",
+    "slot": null,
+    "caption_len": 711,
+    "published_at": "2026-11-09T02:46:16.519140+00:00",
+    "format": "photo",
+    "reel": "",
+    "media_use": "file_photo",
+    "decision": "relevant file photo available (labelled as such); original video unavailable; narration unnecessary",
+    "articles": [
+      {
+        "url": "https://www.bbc.co.uk/news/articles/c3dxw10rjn9no?at_medium=RSS&at_campaign=rss",
+        "title": "Nvidia launches investigation into CEO's affair with suspected Chinese spy"
+      },
+      {
+        "url": "https://www.thehindu.com/sci-tech/technology/nvidia-investigating-reports-that-ceo-jensen-huang-was-targeted-by-chinese-intelligence/article71681239.ece",
+        "title": "Nvidia investigating reports that CEO Jensen Huang was targeted by Chinese intelligence"
+      },
+      {
+        "url": "https://www.thehindubusinessline.com/news/world/trump-backs-nvidia-ceo-after-affair-with-suspected-china-spy/article71681317.ece",
+        "title": "Trump backs Nvidia CEO after affair with suspected China spy"
+      },
+      {
+        "url": "https://www.ndtv.com/world-news/nvidia-launches-probe-into-ceo-jensen-huangs-affair-with-suspected-chinese-spy-12301484#publisher=newsstand",
+        "title": "Nvidia Launches Probe Into CEO Jensen Huang's Affair With Suspected Chinese Spy"
+      },
+      {
+        "url": "https://www.ndtv.com/world-news/nvidia-ceo-jensen-huang-admits-affair-with-chinese-spy-alice-huang-you-deserve-better-from-me-12301472#publisher=newsstand",
+        "title": "\"I Was Unfaithful To My Wife\": Nvidia's Jensen Huang Admits To Affair With Suspected Chinese Spy"
+      },
+      {
+        "url": "https://techcrunch.com/2026/11/08/nvidia-says-its-investigating-ceo-jensen-huangs-relationship-with-possible-chinese-spy/",
+        "title": "Nvidia will investigate CEO Jensen Huang’s relationship with possible Chinese spy"
+      }
+    ],
+    "media_types": [
+      "image/jpeg"
+    ],
+    "facebook": null,
+    "media_id": "17998968017834251",
+    "permalink": "https://www.instagram.com/p/DfgSqS0jRj8/"
   }
 ]
