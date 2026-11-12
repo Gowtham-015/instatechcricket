@@ -1,7 +1,7 @@
 {
   "status": "ONLINE",
   "consecutive_failures": 0,
-  "last_success": "2026-11-09T02:46:50.543158+00:00",
+  "last_success": "2026-11-12T08:28:07.357103+00:00",
   "last_failure": "2026-11-06T06:56:17.096128+00:00",
   "last_error": null,
   "paused_until": null,

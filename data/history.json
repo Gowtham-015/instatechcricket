@@ -1190,7 +1190,15 @@
     ],
     "facebook": null,
     "media_id": "18004056035805371",
-    "permalink": "https://www.instagram.com/p/DfeSppdFvlM/"
+    "permalink": "https://www.instagram.com/p/DfeSppdFvlM/",
+    "insights": {
+      "reach": 0,
+      "saved": 0,
+      "shares": 0,
+      "likes": 0,
+      "comments": 0,
+      "total_interactions": 0
+    }
   },
   {
     "id": "20261109024616_b1a408e9",
@@ -1247,6 +1255,56 @@
     ],
     "facebook": null,
     "media_id": "17998968017834251",
-    "permalink": "https://www.instagram.com/p/DfgSqS0jRj8/"
+    "permalink": "https://www.instagram.com/p/DfgSqS0jRj8/",
+    "insights": {
+      "reach": 0,
+      "saved": 0,
+      "shares": 0,
+      "likes": 1,
+      "comments": 0,
+      "total_interactions": 1
+    }
+  },
+  {
+    "id": "20261112082743_807e8e48",
+    "title": "New York building collapse kills at least two, officials say",
+    "url": "https://www.bbc.co.uk/news/articles/c8zx964glvwxo?at_medium=RSS&at_campaign=rss",
+    "category": "News",
+    "fingerprint": "807e8e48c28b49",
+    "sources": [
+      "Al Jazeera",
+      "BBC World",
+      "The Hindu BusinessLine"
+    ],
+    "score": 81.6,
+    "breaking": false,
+    "mode": "ai",
+    "slot": "2026-11-12 13:00",
+    "caption_len": 500,
+    "published_at": "2026-11-12T08:27:43.873062+00:00",
+    "format": "card",
+    "reel": "",
+    "media_use": "editorial_graphic",
+    "decision": "no authentic photograph or video could be matched to this story; publishing an original fact card instead of a misleading picture or a generic Reel",
+    "articles": [
+      {
+        "url": "https://www.bbc.co.uk/news/articles/c8zx964glvwxo?at_medium=RSS&at_campaign=rss",
+        "title": "New York building collapse kills at least two, officials say"
+      },
+      {
+        "url": "https://www.thehindubusinessline.com/news/world/building-collapse-in-brooklyn-kills-at-least-two-injures-more-than-10/article71692212.ece",
+        "title": "Building collapse in Brooklyn kills at least two, injures more than 10"
+      },
+      {
+        "url": "https://www.aljazeera.com/news/2026/11/12/building-collapse-in-brooklyn-kills-two-injures-more-than-a-dozen?traffic_source=rss",
+        "title": "Building collapse in Brooklyn kills two, injures more than a dozen"
+      }
+    ],
+    "media_types": [
+      "image/jpeg"
+    ],
+    "facebook": null,
+    "media_id": "18074802599757637",
+    "permalink": "https://www.instagram.com/p/DfooGsUG8Q6/"
   }
 ]
