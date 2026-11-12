@@ -1306,5 +1306,67 @@
     "facebook": null,
     "media_id": "18074802599757637",
     "permalink": "https://www.instagram.com/p/DfooGsUG8Q6/"
+  },
+  {
+    "id": "20261112165716_7cceadfe",
+    "title": "What we know as Nvidia CEO Jensen Huang resigns over affair allegations",
+    "url": "https://www.bbc.co.uk/news/articles/ckgel338xql3o?at_medium=RSS&at_campaign=rss",
+    "category": "News",
+    "fingerprint": "7cceadfed12476",
+    "sources": [
+      "Al Jazeera",
+      "BBC News",
+      "BBC World",
+      "Economic Times Tech",
+      "NDTV News",
+      "TechCrunch",
+      "The Hindu BusinessLine",
+      "The Hindu International",
+      "The Verge",
+      "Times of India",
+      "Wired"
+    ],
+    "score": 93.1,
+    "breaking": true,
+    "mode": "ai",
+    "slot": "2026-11-12 21:00",
+    "caption_len": 622,
+    "published_at": "2026-11-12T16:57:16.264624+00:00",
+    "format": "photo",
+    "reel": "",
+    "media_use": "file_photo",
+    "decision": "relevant file photo available (labelled as such); original video unavailable; narration unnecessary",
+    "articles": [
+      {
+        "url": "https://www.bbc.co.uk/news/articles/ckgel338xql3o?at_medium=RSS&at_campaign=rss",
+        "title": "What we know as Nvidia CEO Jensen Huang resigns over affair allegations"
+      },
+      {
+        "url": "https://www.bbc.co.uk/news/articles/cqgm37dv20e8o?at_medium=RSS&at_campaign=rss",
+        "title": "Who is Nvidia's interim CEO Colette Kress - and who could take over permanently?"
+      },
+      {
+        "url": "https://www.thehindu.com/news/international/nvidia-ceo-jensen-huang-resigns-amid-scandal/article71694271.ece",
+        "title": "Nvidia CEO Jensen Huang resigns amid spy scandal"
+      },
+      {
+        "url": "https://www.thehindu.com/news/international/megaspeed-to-cooperate-with-us-probe-into-nvidia-ceo-jensen-huang-scandal/article71693276.ece",
+        "title": "Megaspeed to cooperate with U.S. probe into Nvidia CEO Jensen Huang scandal"
+      },
+      {
+        "url": "https://www.thehindu.com/news/international/nvidia-preparing-to-oust-ceo-jensen-huang-us-media/article71692138.ece",
+        "title": "Nvidia preparing to oust CEO Jensen Huang: U.S. media"
+      },
+      {
+        "url": "https://www.thehindubusinessline.com/info-tech/trump-suggests-tim-cook-replace-jensen-huang-as-nvidia-ceo/article71695113.ece",
+        "title": "Trump suggests Tim Cook replace Jensen Huang as Nvidia CEO"
+      }
+    ],
+    "media_types": [
+      "image/jpeg"
+    ],
+    "facebook": null,
+    "media_id": "17996529453116212",
+    "permalink": "https://www.instagram.com/p/DfpibFzlfzg/"
   }
 ]
