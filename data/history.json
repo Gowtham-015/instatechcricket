@@ -1305,7 +1305,15 @@
     ],
     "facebook": null,
     "media_id": "18074802599757637",
-    "permalink": "https://www.instagram.com/p/DfooGsUG8Q6/"
+    "permalink": "https://www.instagram.com/p/DfooGsUG8Q6/",
+    "insights": {
+      "reach": 0,
+      "saved": 0,
+      "shares": 0,
+      "likes": 0,
+      "comments": 0,
+      "total_interactions": 0
+    }
   },
   {
     "id": "20261112165716_7cceadfe",
@@ -1367,6 +1375,51 @@
     ],
     "facebook": null,
     "media_id": "17996529453116212",
-    "permalink": "https://www.instagram.com/p/DfpibFzlfzg/"
+    "permalink": "https://www.instagram.com/p/DfpibFzlfzg/",
+    "insights": {
+      "reach": 0,
+      "saved": 0,
+      "shares": 0,
+      "likes": 0,
+      "comments": 0,
+      "total_interactions": 0
+    }
+  },
+  {
+    "id": "20261114161110_e1730dcf",
+    "title": "NCP merger talks ended with death of Ajit Pawar, says Supriya Sule",
+    "url": "https://www.thehindu.com/news/national/maharashtra/ncp-merger-talks-ended-with-death-of-ajit-pawar-says-supriya-sule/article71701834.ece",
+    "category": "News",
+    "fingerprint": "e1730dcfcd43f9",
+    "sources": [
+      "Hindustan Times",
+      "The Hindu"
+    ],
+    "score": 79.5,
+    "breaking": false,
+    "mode": "ai",
+    "slot": "2026-11-14 21:00",
+    "caption_len": 517,
+    "published_at": "2026-11-14T16:11:10.150861+00:00",
+    "format": "card",
+    "reel": "",
+    "media_use": "editorial_graphic",
+    "decision": "no authentic photograph or video could be matched to this story; publishing an original fact card instead of a misleading picture or a generic Reel",
+    "articles": [
+      {
+        "url": "https://www.thehindu.com/news/national/maharashtra/ncp-merger-talks-ended-with-death-of-ajit-pawar-says-supriya-sule/article71701834.ece",
+        "title": "NCP merger talks ended with death of Ajit Pawar, says Supriya Sule"
+      },
+      {
+        "url": "https://www.hindustantimes.com/india-news/supriya-sule-says-full-stop-on-merger-after-ajit-pawar-s-death-amid-ncp-reunion-buzz-101794649960304.html",
+        "title": "Supriya Sule says ‘full stop on merger after Ajit Pawar’s death’ amid NCP reunion buzz"
+      }
+    ],
+    "media_types": [
+      "image/jpeg"
+    ],
+    "facebook": null,
+    "media_id": "18112176806614524",
+    "permalink": "https://www.instagram.com/p/Dfum12_kWmR/"
   }
 ]
