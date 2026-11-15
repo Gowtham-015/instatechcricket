@@ -1421,5 +1421,41 @@
     "facebook": null,
     "media_id": "18112176806614524",
     "permalink": "https://www.instagram.com/p/Dfum12_kWmR/"
+  },
+  {
+    "id": "20261115134839_34f7fee0",
+    "title": "An overview of Jensen Huang’s messy days",
+    "url": "https://www.theverge.com/column/1033943/jensen-huang-nvidia-china-spying-scandal-resignation",
+    "category": "Technology",
+    "fingerprint": "34f7fee07ef51d",
+    "sources": [
+      "The Verge"
+    ],
+    "score": 69.8,
+    "breaking": false,
+    "mode": "ai",
+    "slot": "2026-11-15 18:00",
+    "caption_len": 516,
+    "published_at": "2026-11-15T13:48:39.749265+00:00",
+    "format": "carousel",
+    "reel": "",
+    "media_use": "file_photo",
+    "decision": "6 relevant photos plus 3 distinct facts form a meaningful sequence",
+    "articles": [
+      {
+        "url": "https://www.theverge.com/column/1033943/jensen-huang-nvidia-china-spying-scandal-resignation",
+        "title": "An overview of Jensen Huang’s messy days"
+      }
+    ],
+    "media_types": [
+      "image/jpeg",
+      "image/jpeg",
+      "image/jpeg",
+      "image/jpeg",
+      "image/jpeg"
+    ],
+    "facebook": null,
+    "media_id": "18135133024740268",
+    "permalink": "https://www.instagram.com/p/Dfw7QPQG8n_/"
   }
 ]
