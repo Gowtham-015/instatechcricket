@@ -1457,5 +1457,46 @@
     "facebook": null,
     "media_id": "18135133024740268",
     "permalink": "https://www.instagram.com/p/Dfw7QPQG8n_/"
+  },
+  {
+    "id": "20261115141216_48601d25",
+    "title": "Four in a row - Australia win women's rugby league World Cup again",
+    "url": "https://www.bbc.co.uk/sport/rugby-league/videos/c6kgrvpnmdgdo?at_medium=RSS&at_campaign=rss",
+    "category": "Sports",
+    "fingerprint": "48601d25e7010f",
+    "sources": [
+      "Al Jazeera",
+      "BBC Sport"
+    ],
+    "score": 73.9,
+    "breaking": false,
+    "mode": "fallback",
+    "slot": null,
+    "caption_len": 740,
+    "published_at": "2026-11-15T14:12:16.584202+00:00",
+    "format": "reel",
+    "reel": "voice=True footage=commons +photos look=Neerja/cyan/center/vignette",
+    "media_use": "file_photo",
+    "decision": "operator forced a Reel",
+    "articles": [
+      {
+        "url": "https://www.bbc.co.uk/sport/rugby-league/videos/c6kgrvpnmdgdo?at_medium=RSS&at_campaign=rss",
+        "title": "Four in a row - Australia win women's rugby league World Cup again"
+      },
+      {
+        "url": "https://www.bbc.co.uk/sport/rugby-league/articles/c50mdzx3j039o?at_medium=RSS&at_campaign=rss",
+        "title": "Ruthless Australia win record fourth Women's World Cup"
+      },
+      {
+        "url": "https://www.aljazeera.com/sports/2026/11/15/australia-crush-new-zealand-to-win-fourth-womens-rugby-league-world-cup?traffic_source=rss",
+        "title": "Australia crush New Zealand to win fourth Women’s Rugby League World Cup"
+      }
+    ],
+    "media_types": [
+      "video/mp4"
+    ],
+    "facebook": null,
+    "media_id": "17955729924281057",
+    "permalink": "https://www.instagram.com/reel/Dfw-BjIj3jS/"
   }
 ]
