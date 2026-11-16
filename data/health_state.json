@@ -1,9 +1,9 @@
 {
-  "status": "ONLINE",
-  "consecutive_failures": 0,
+  "status": "DEGRADED",
+  "consecutive_failures": 1,
   "last_success": "2026-11-15T14:13:56.711313+00:00",
-  "last_failure": "2026-11-06T06:56:17.096128+00:00",
-  "last_error": null,
+  "last_failure": "2026-11-16T21:17:44.423313+00:00",
+  "last_error": "Instagram token invalid/expired: 17841439019615204/content_publishing_limit: Error validating access token: The session has been invalidated because the user changed their password or Facebook has changed the session for security reasons.",
   "paused_until": null,
   "last_alert": null
 }
