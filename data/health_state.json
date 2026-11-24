@@ -1,9 +1,9 @@
 {
-  "status": "ONLINE",
-  "consecutive_failures": 0,
+  "status": "DEGRADED",
+  "consecutive_failures": 1,
   "last_success": "2026-11-24T20:04:08.498197+00:00",
-  "last_failure": "2026-11-24T19:44:26.425101+00:00",
-  "last_error": null,
+  "last_failure": "2026-11-24T22:48:35.363635+00:00",
+  "last_error": "Instagram token invalid/expired: 17841439019615204/content_publishing_limit: Error validating access token: Session has expired on Tuesday, 24-Nov-26 13:00:00 PST. The current time is Tuesday, 24-Nov-26 14:48:35 PST.",
   "paused_until": null,
   "last_alert": null
 }
