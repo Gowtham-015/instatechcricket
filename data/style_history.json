@@ -1,5 +1,23 @@
 [
   {
+    "name": "Neerja/yellow/box/natural",
+    "voice": "en-IN-NeerjaNeural",
+    "rate": "+13%",
+    "pitch": "+3Hz",
+    "highlight": "yellow",
+    "caption_pos": "mid",
+    "caption_size": 104,
+    "caption_words": 3,
+    "caption_upper": false,
+    "hook_layout": "box",
+    "hook_pos": "top",
+    "hook_anim": "fade",
+    "grade": "natural",
+    "outro": 1,
+    "pan_flip": false,
+    "opener": 4
+  },
+  {
     "name": "Neerja/cyan/center/vignette",
     "voice": "en-IN-NeerjaNeural",
     "rate": "+2%",
@@ -124,23 +142,5 @@
     "outro": 1,
     "pan_flip": false,
     "opener": 2
-  },
-  {
-    "name": "Neerja/accent/left/punchy",
-    "voice": "en-IN-NeerjaNeural",
-    "rate": "+13%",
-    "pitch": "+0Hz",
-    "highlight": "accent",
-    "caption_pos": "high",
-    "caption_size": 112,
-    "caption_words": 3,
-    "caption_upper": true,
-    "hook_layout": "left",
-    "hook_pos": "low",
-    "hook_anim": "fade",
-    "grade": "punchy",
-    "outro": 2,
-    "pan_flip": true,
-    "opener": 3
   }
 ]
