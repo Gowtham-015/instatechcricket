@@ -1,8 +1,8 @@
 {
   "status": "ONLINE",
   "consecutive_failures": 0,
-  "last_success": "2026-11-24T20:01:24.323382+00:00",
-  "last_failure": "2026-11-24T12:41:48.361759+00:00",
+  "last_success": "2026-11-24T20:04:08.498197+00:00",
+  "last_failure": "2026-11-24T19:44:26.425101+00:00",
   "last_error": null,
   "paused_until": null,
   "last_alert": null
