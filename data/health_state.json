@@ -1,9 +1,9 @@
 {
   "status": "PAUSED",
-  "consecutive_failures": 9,
+  "consecutive_failures": 10,
   "last_success": "2026-11-24T20:04:08.498197+00:00",
-  "last_failure": "2026-11-27T08:50:19.652574+00:00",
-  "last_error": "Instagram token invalid/expired: 17841439019615204/content_publishing_limit: Error validating access token: Session has expired on Tuesday, 24-Nov-26 13:00:00 PST. The current time is Friday, 27-Nov-26 00:50:19 PST.",
-  "paused_until": "2026-11-27T11:50:19.652598+00:00",
+  "last_failure": "2026-11-27T18:30:30.480189+00:00",
+  "last_error": "Instagram token invalid/expired: 17841439019615204/content_publishing_limit: Error validating access token: Session has expired on Tuesday, 24-Nov-26 13:00:00 PST. The current time is Friday, 27-Nov-26 10:30:30 PST.",
+  "paused_until": "2026-11-27T21:30:30.480225+00:00",
   "last_alert": null
 }
